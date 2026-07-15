@@ -81,6 +81,11 @@ def initialize() -> None:
                 ruby_json TEXT NOT NULL, updated_at TEXT NOT NULL,
                 PRIMARY KEY (volume_id, page_index, block_index)
             );
+            CREATE TABLE IF NOT EXISTS grammar_explanations (
+                id TEXT PRIMARY KEY, sentence TEXT NOT NULL, focus TEXT NOT NULL,
+                question TEXT, provider TEXT NOT NULL, model TEXT NOT NULL,
+                result_json TEXT NOT NULL, created_at TEXT NOT NULL
+            );
             """
         )
 
@@ -230,3 +235,15 @@ def save_block_text(volume_id: str, page_index: int, block_index: int, lines: li
     with connection() as conn:
         conn.execute("INSERT OR REPLACE INTO block_text_overrides VALUES (?, ?, ?, ?, ?, ?)",
                      (volume_id, page_index, block_index, json.dumps(lines, ensure_ascii=False), json.dumps(ruby, ensure_ascii=False), updated_at))
+
+
+def save_grammar_explanation(item: dict) -> None:
+    with connection() as conn:
+        conn.execute("INSERT INTO grammar_explanations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (item["id"], item["sentence"], item["focus"], item.get("question"), item["provider"], item["model"], json.dumps(item["explanation"], ensure_ascii=False), item["created_at"]))
+
+
+def grammar_explanations(sentence: str, focus: str) -> list[dict]:
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM grammar_explanations WHERE sentence=? AND focus=? ORDER BY created_at DESC", (sentence, focus)).fetchall()
+    return [{**dict(row), "explanation": json.loads(row["result_json"])} for row in rows]

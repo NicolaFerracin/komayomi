@@ -15,6 +15,7 @@ export const api = {
   dictionary: (query: string) => request<DictionaryResult>(`/api/dictionary?q=${encodeURIComponent(query)}`),
   grammar: (sentence: string, focus: string) => request<GrammarAnalysis>(`/api/grammar?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
   explainGrammar: (sentence: string, focus: string, provider?: string, question?: string) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null, question: question || null})}),
+  grammarExplanationHistory: (sentence: string, focus: string) => request<GrammarExplanation[]>(`/api/grammar/explanations?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
   llmStatus: () => request<LlmStatus>('/api/llm/status'),
   reader: (id: string) => request<ReaderData>(`/api/volumes/${id}/reader`),
   importLocal: (path: string, title?: string, series?: string) =>

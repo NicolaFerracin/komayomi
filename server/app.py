@@ -223,7 +223,16 @@ FOCUS: {payload.focus or payload.sentence}"""
         prompt += f"\nREADER REQUEST: {payload.question}"
     try: result, provider = await structured_text(payload.provider, prompt, GRAMMAR_EXPLANATION_SCHEMA)
     except (ValueError, httpx.HTTPError, json.JSONDecodeError) as error: raise HTTPException(503, str(error))
-    return {"explanation": result, "provider": provider.id, "model": provider.model}
+    saved = {"id": uuid.uuid4().hex, "sentence": payload.sentence, "focus": payload.focus or payload.sentence,
+             "question": payload.question, "explanation": result, "provider": provider.id,
+             "model": provider.model, "created_at": now()}
+    db.save_grammar_explanation(saved)
+    return saved
+
+
+@app.get("/api/grammar/explanations")
+def grammar_explanation_history(sentence: str, focus: str):
+    return db.grammar_explanations(sentence, focus)
 
 
 @app.get("/api/volumes")
