@@ -13,6 +13,8 @@ test.beforeEach(async ({page}) => {
     if(url.pathname==='/api/volumes/v1/reader') return route.fulfill({json:{title:'Dragon Ball',volume:'Volume 01',volume_id:'v1',current_page:0,pages}})
     if(url.pathname==='/api/volumes/v1/bookmarks') return route.fulfill({json:[]})
     if(url.pathname==='/api/llm/status') return route.fulfill({json:{preferred:'mock',providers:[{id:'mock',name:'Mock',model:'local-test',configured:true}]}})
+    if(url.pathname==='/api/dictionary') return route.fulfill({json:{query:url.searchParams.get('q'),tokens:[{surface:'むかしむかし',lemma:'むかしむかし',reading:'ムカシムカシ',part_of_speech:'adverb',detail:null,inflection:null}],entries:[{id:1,writings:[],readings:['むかしむかし'],matched_by:'むかしむかし',senses:[{glosses:['once upon a time'],parts_of_speech:['adverb'],misc:[]}]}],kanji:[]}})
+    if(url.pathname==='/api/grammar') return route.fulfill({json:{sentence:url.searchParams.get('sentence'),focus:url.searchParams.get('focus'),needs_context:false,matches:[]}})
     if(url.pathname.includes('/images/')||url.pathname.startsWith('/api/mock/')) return route.fulfill({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200"/>'})
     if(method==='PUT'||method==='POST'||method==='DELETE') return route.fulfill({json:{ok:true}})
     return route.fulfill({status:404,json:{detail:'Not mocked'}})
@@ -45,4 +47,32 @@ test('exposes keyboard help and shortcut navigation', async ({page}) => {
   await page.keyboard.press('Escape')
   await page.keyboard.press('g')
   await expect(page.getByRole('heading',{name:'Pages'})).toBeVisible()
+})
+
+async function selectFirstBubble(page:import('playwright/test').Page) {
+  await page.locator('.bubble-overlay__ink').first().evaluate((ink) => {
+    const range=document.createRange();range.selectNodeContents(ink);const selection=getSelection();selection?.removeAllRanges();selection?.addRange(range)
+    ink.closest('.bubble-overlay')?.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:300,clientY:300}))
+  })
+}
+
+test('selection lookup replaces Page Lens', async ({page}) => {
+  await page.getByRole('button',{name:/Page Lens/}).click()
+  await selectFirstBubble(page)
+  await page.getByRole('button',{name:/Look up/}).click()
+  await expect(page.getByRole('heading',{name:'むかしむかし'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Page Lens'})).toHaveCount(0)
+})
+
+test('unsaved transcription blocks accidental tool switches', async ({page}) => {
+  await page.locator('.bubble-edit-trigger').first().evaluate((button)=>(button as HTMLButtonElement).click())
+  await expect(page.getByRole('heading',{name:/Bubble 1/})).toBeVisible()
+  await page.locator('.editor-line textarea').fill('changed but not saved')
+  page.once('dialog',(dialog)=>dialog.dismiss())
+  await page.getByRole('button',{name:/Page Lens/}).click()
+  await expect(page.getByRole('heading',{name:/Bubble 1/})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Page Lens'})).toHaveCount(0)
+  page.once('dialog',(dialog)=>dialog.accept())
+  await page.getByRole('button',{name:/Page Lens/}).click()
+  await expect(page.getByRole('heading',{name:'Page Lens'})).toBeVisible()
 })

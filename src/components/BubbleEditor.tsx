@@ -16,7 +16,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
   onDirtyChange:(dirty:boolean)=>void
 }) {
   const [lines, setLines] = useState([...block.lines])
-  const [ruby, setRuby] = useState<RubySpan[][]>(block.ruby.map((line) => [...line]))
+  const [ruby, setRuby] = useState<RubySpan[][]>(block.lines.map((_,index) => [...(block.ruby[index] || [])]))
   const [markups, setMarkups] = useState(() => block.lines.map((line, index) => toMarkup(line, block.ruby[index] || [])))
   const [saved, setSaved] = useState(false)
   const [status, setStatus] = useState<LlmStatus | null>(null)
@@ -27,7 +27,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
 
   useEffect(() => {
     setLines([...block.lines])
-    setRuby(block.ruby.map((line) => [...line]))
+    setRuby(block.lines.map((_,index) => [...(block.ruby[index] || [])]))
     setMarkups(block.lines.map((line, index) => toMarkup(line, block.ruby[index] || [])))
     onDirtyChange(false)
   }, [block])
@@ -76,7 +76,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
             <label><span>Canonical Japanese</span><textarea value={line} onChange={(e) => {onDirtyChange(true);setLines((current) => current.map((item, i) => i === index ? e.target.value : item))}}/></label>
             <div className="raw-ocr"><span>RAW OCR</span>{block.raw_lines[index] ?? 'New line from vision'}</div>
             <label className="ruby-field"><span>Furigana markup <i>{'{kanji|reading}'} inside the full sentence</i></span><input value={markups[index]} onChange={(e) => updateRuby(index, e.target.value)} placeholder="{食|た}べる"/></label>
-            <div className="ruby-preview"><span>PREVIEW</span><p>{renderRuby(lines[index], ruby[index])}</p></div>
+            <div className="ruby-preview"><span>PREVIEW</span><p>{renderRuby(lines[index], ruby[index] || [])}</p></div>
           </div>
         ))}
       </div>
