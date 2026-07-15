@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookOpen, ChevronLeft, ChevronRight, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -115,12 +115,15 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [lensSeed, setLensSeed] = useState('')
   const [settings, setSettings] = useState(false)
   const [navigator, setNavigator] = useState(false)
+  const [bookmarks, setBookmarks] = useState<Set<number>>(new Set())
   const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
   const [layoutHistory, setLayoutHistory] = useState<Array<{page:number;block:number;box:[number,number,number,number]}>>([])
   const stageRef = useRef<HTMLElement>(null)
   const dragRef = useRef({ x: 0, y: 0, left: 0, top: 0 })
   const page = data.pages[pageIndex]
+
+  useEffect(()=>{api.bookmarks(data.volume_id).then((items)=>setBookmarks(new Set(items))).catch(()=>undefined)},[data.volume_id])
 
   function move(delta: number) {
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
@@ -137,6 +140,13 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     if (!selectionAction) return
     setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block})
     setEditor(null); setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
+  }
+
+  function toggleBookmark() {
+    const active = bookmarks.has(pageIndex)
+    setBookmarks((current)=>{const next=new Set(current);active?next.delete(pageIndex):next.add(pageIndex);return next})
+    const action = active ? api.removeBookmark(data.volume_id,pageIndex) : api.addBookmark(data.volume_id,pageIndex)
+    action.catch(()=>setBookmarks((current)=>{const next=new Set(current);active?next.add(pageIndex):next.delete(pageIndex);return next}))
   }
 
   useEffect(() => {
@@ -222,6 +232,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
           <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { setLens(!lens); setLensSeed(''); setEditor(null); setNavigator(false); setSettings(false) }}><Eye size={18}/><span>Page Lens</span></button>
           <button className={navigator?'active':''} title="Browse pages" onClick={()=>{setNavigator(!navigator);setLens(false);setEditor(null);setLookup(null);setSettings(false)}}><Grid3X3 size={18}/></button>
+          <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
           <button className={settings?'active':''} title="Reader settings" onClick={()=>{setSettings(!settings);setLens(false);setNavigator(false);setEditor(null);setLookup(null)}}><Settings2 size={18}/></button>
         </div>
       </header>
@@ -256,7 +267,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
-      {navigator && <PageNavigator pages={data.pages} current={pageIndex} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
+      {navigator && <PageNavigator pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
       {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
       {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
 

@@ -86,6 +86,11 @@ def initialize() -> None:
                 question TEXT, provider TEXT NOT NULL, model TEXT NOT NULL,
                 result_json TEXT NOT NULL, created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS page_bookmarks (
+                volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (volume_id, page_index)
+            );
             """
         )
 
@@ -121,6 +126,22 @@ def save_volume(volume: Volume) -> None:
 def save_position(volume_id: str, page: int) -> None:
     with connection() as db:
         db.execute("UPDATE volumes SET current_page = ? WHERE id = ?", (page, volume_id))
+
+
+def bookmarks(volume_id: str) -> list[int]:
+    with connection() as db:
+        rows = db.execute("SELECT page_index FROM page_bookmarks WHERE volume_id=? ORDER BY page_index", (volume_id,)).fetchall()
+    return [row["page_index"] for row in rows]
+
+
+def save_bookmark(volume_id: str, page_index: int, created_at: str) -> None:
+    with connection() as db:
+        db.execute("INSERT OR REPLACE INTO page_bookmarks VALUES (?, ?, ?)", (volume_id, page_index, created_at))
+
+
+def delete_bookmark(volume_id: str, page_index: int) -> None:
+    with connection() as db:
+        db.execute("DELETE FROM page_bookmarks WHERE volume_id=? AND page_index=?", (volume_id, page_index))
 
 
 def corrections_for(volume_id: str) -> dict[tuple[int, int, int], dict]:

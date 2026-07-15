@@ -354,6 +354,26 @@ def position(volume_id: str, payload: Position):
     return {"ok": True}
 
 
+@app.get("/api/volumes/{volume_id}/bookmarks")
+def bookmarks(volume_id: str):
+    require_volume(volume_id)
+    return db.bookmarks(volume_id)
+
+
+@app.put("/api/volumes/{volume_id}/bookmarks/{page_index}")
+def add_bookmark(volume_id: str, page_index: int):
+    volume = require_volume(volume_id)
+    if not 0 <= page_index < volume.page_count: raise HTTPException(404, "Page not found")
+    db.save_bookmark(volume_id, page_index, now())
+    return {"ok": True}
+
+
+@app.delete("/api/volumes/{volume_id}/bookmarks/{page_index}")
+def remove_bookmark(volume_id: str, page_index: int):
+    require_volume(volume_id); db.delete_bookmark(volume_id, page_index)
+    return {"ok": True}
+
+
 @app.put("/api/volumes/{volume_id}/corrections")
 def correction(volume_id: str, payload: Correction):
     require_volume(volume_id)
