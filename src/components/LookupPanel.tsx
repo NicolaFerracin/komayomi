@@ -20,10 +20,10 @@ export function LookupPanel({ query, rubySpans = [], onClose }: { query: string;
       {!result && !error && <div className="lookup-loading"><LoaderCircle className="spin" size={20}/> Reading locally…</div>}
       {error && <div className="error-note">{error}</div>}
       {result && <>
-        {result.tokens.length > 1 && <div className="token-strip">{result.tokens.map((token, index) => { const printed = printedReadings(result, rubySpans)[index]; return <span key={index} className={printed ? 'has-printed-reading' : ''} title={`${token.part_of_speech}${token.inflection ? ` · ${token.inflection}` : ''}`}>{token.surface}<small>{printed || (token.lemma !== token.surface ? token.lemma : token.reading)}</small>{printed && <i>printed</i>}</span> })}</div>}
+        {result.tokens.length > 1 && <div className="token-strip">{result.tokens.map((token, index) => { const printed = printedReadings(result, rubySpans)[index]; return <span key={index} className={printed ? 'has-printed-reading' : ''} title={`${token.part_of_speech}${token.inflection ? ` · ${token.inflection}` : ''}`}>{token.surface}<small>{printed || token.reading}</small>{printed && <i>printed</i>}</span> })}</div>}
         <div className="dictionary-entries">
           {result.entries.map((entry, index) => <article className="dictionary-entry" key={entry.id}>
-            <div className="dictionary-entry__head"><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{entry.writings[0] || entry.readings[0]}</strong><em>{entry.readings.join('、')}</em></div>{entry.matched_by !== query && <i>from {entry.matched_by}</i>}</div>
+            <div className="dictionary-entry__head"><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{printedForm(entry, result)}</strong><em>{entry.readings.join('、')}</em></div>{entry.matched_by !== printedForm(entry, result) && <i>dictionary form {entry.matched_by}</i>}</div>
             {entry.senses.slice(0, 4).map((sense, senseIndex) => <div className="dictionary-sense" key={senseIndex}><b>{senseIndex + 1}</b><div><p>{sense.glosses.join('; ')}</p><small>{sense.parts_of_speech.join(' · ')}</small></div></div>)}
           </article>)}
           {!result.entries.length && <div className="no-entry">No exact word entry. Individual kanji are shown below.</div>}
@@ -33,6 +33,13 @@ export function LookupPanel({ query, rubySpans = [], onClose }: { query: string;
       </>}
     </aside>
   )
+}
+
+function printedForm(entry: DictionaryResult['entries'][number], result: DictionaryResult): string {
+  const contextualToken = result.tokens.find((token) => token.lemma === entry.matched_by)
+  if (contextualToken) return contextualToken.surface
+  if (entry.readings.includes(result.query)) return result.query
+  return entry.writings[0] || entry.readings[0]
 }
 
 function kana(value: string | null): string {

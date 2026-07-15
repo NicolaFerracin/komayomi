@@ -85,10 +85,15 @@ def lookup(query: str) -> dict:
     if not query or len(query) > 100:
         return {"query": query, "tokens": [], "entries": [], "kanji": []}
     tokens = tokenize(query)
-    candidates = [query]
+    # Contextual lemmas from the tokenizer are more useful than an unranked
+    # list of homophones for kana-only text (e.g. こと -> 事, not 琴/古都).
+    contextual = []
+    surfaces = []
     for token in tokens:
         if token["part_of_speech"] not in {"助詞", "助動詞", "補助記号", "空白"}:
-            candidates.extend([token["lemma"], token["surface"]])
+            contextual.append(token["lemma"])
+            surfaces.append(token["surface"])
+    candidates = contextual + [query] + surfaces
     candidates = list(dict.fromkeys(candidate for candidate in candidates if candidate))
     results = []
     seen: set[int] = set()
