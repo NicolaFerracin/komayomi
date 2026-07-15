@@ -78,3 +78,6 @@ export type SavedItem = {
   id: string; text: string; reading: string | null; meaning: string | null
   volume_id: string | null; page_index: number | null; context: string | null; notes: string | null; created_at: string
 }
+
+export type GrammarAnalysis = { sentence: string; focus: string | null; needs_context: boolean; matches: Array<{span: string; form: string; title: string; explanation: string; translation_hint: string; confidence: number; source: string}> }
+export type GrammarExplanation = { explanation: {interpretation: string; breakdown: Array<{part: string; role: string}>; uncertainty: string}; provider: string; model: string }

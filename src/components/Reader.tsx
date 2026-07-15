@@ -26,7 +26,7 @@ function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
 
 function BubbleOverlay({ block, pageWidth, pageHeight, active, layoutMode, onClick, onSelection, onGeometryChange }: {
   block: TextBlock; pageWidth: number; pageHeight: number; onClick: () => void
-  onSelection: (text: string, ruby: RubySpan[], x: number, y: number) => void
+  onSelection: (text: string, ruby: RubySpan[], context: string, x: number, y: number) => void
   active: boolean; layoutMode: boolean; onGeometryChange: (box: [number, number, number, number], commit: boolean) => void
 }) {
   const geometryDrag = useRef<{x: number; y: number; box: [number, number, number, number]; resize: boolean} | null>(null)
@@ -89,7 +89,7 @@ function BubbleOverlay({ block, pageWidth, pageHeight, active, layoutMode, onCli
       const text = selection?.toString().trim()
       if (text && selection?.rangeCount) {
         const rect = selection.getRangeAt(0).getBoundingClientRect()
-        onSelection(text, block.ruby.flat().filter((span) => text.includes(span.base)), rect.right, rect.bottom)
+        onSelection(text, block.ruby.flat().filter((span) => text.includes(span.base)), block.lines.join(''), rect.right, rect.bottom)
       }
     }}>
       <span className="bubble-overlay__ink" onCopy={copyWithoutNestedRuby}>
@@ -110,8 +110,8 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [panning, setPanning] = useState(false)
   const [editor, setEditor] = useState<number | null>(null)
   const [lens, setLens] = useState(false)
-  const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; block: number} | null>(null)
-  const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; block: number; x: number; y: number} | null>(null)
+  const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
+  const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
   const stageRef = useRef<HTMLElement>(null)
   const dragRef = useRef({ x: 0, y: 0, left: 0, top: 0 })
   const page = data.pages[pageIndex]
@@ -221,15 +221,15 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           height: `calc((100vh - 172px) * ${zoom})`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, x, y) => setSelectionAction({text, ruby, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
 
       {selectedBlock && <BubbleEditor volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={editor!} block={selectedBlock} onClose={() => setEditor(null)} onSaved={saveBlock}/>} 
       {lens && <PageLens volumeId={data.volume_id} page={pageIndex} onClose={() => setLens(false)} onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}/>} 
-      {selectionAction && !editor && !lens && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={() => { setLookup({text: selectionAction.text, ruby: selectionAction.ruby, block: selectionAction.block}); setSelectionAction(null) }}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
-      {lookup && editor === null && !lens && <LookupPanel query={lookup.text} rubySpans={lookup.ruby} onClose={() => setLookup(null)}/>} 
+      {selectionAction && !editor && !lens && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={() => { setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block}); setSelectionAction(null) }}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
+      {lookup && editor === null && !lens && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)}/>}
 
       <footer className="reader-footer"><span><LibraryIcon size={14}/> {data.title}</span><span>← next page · previous page →</span><span><BookOpen size={14}/> {pageIndex + 1} / {data.pages.length}</span></footer>
     </main>

@@ -22,7 +22,8 @@ from . import db
 from .jobs import output_path, process_volume
 from .models import Volume
 from .dictionary import lookup
-from .llm import public_status, structured_vision
+from .llm import public_status, structured_text, structured_vision
+from .grammar import analyze as analyze_grammar
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 UPLOAD_ROOT = db.DATA_DIR / "library"
@@ -89,6 +90,12 @@ class PageOverride(BaseModel):
 
 class BlockGeometry(BaseModel):
     box: list[float]
+
+
+class GrammarExplain(BaseModel):
+    sentence: str
+    focus: str | None = None
+    provider: str | None = None
 
 
 def now() -> str:
@@ -181,6 +188,26 @@ def llm_status():
 @app.get("/api/dictionary")
 def dictionary_lookup(q: str):
     return lookup(q)
+
+
+@app.get("/api/grammar")
+def grammar_lookup(sentence: str, focus: str | None = None):
+    return analyze_grammar(sentence, focus)
+
+
+GRAMMAR_EXPLANATION_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
+    "interpretation": {"type": "string"}, "breakdown": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {"part": {"type": "string"}, "role": {"type": "string"}}, "required": ["part", "role"]}}, "uncertainty": {"type": "string"},
+}, "required": ["interpretation", "breakdown", "uncertainty"]}
+
+
+@app.post("/api/grammar/explain")
+async def explain_grammar(payload: GrammarExplain):
+    prompt = f"""Explain the focused Japanese expression as it functions in this exact manga sentence. Do not replace kana with inferred kanji. Separate literal structure from natural meaning, mention ambiguity honestly, and be concise.
+SENTENCE: {payload.sentence}
+FOCUS: {payload.focus or payload.sentence}"""
+    try: result, provider = await structured_text(payload.provider, prompt, GRAMMAR_EXPLANATION_SCHEMA)
+    except (ValueError, httpx.HTTPError, json.JSONDecodeError) as error: raise HTTPException(503, str(error))
+    return {"explanation": result, "provider": provider.id, "model": provider.model}
 
 
 @app.get("/api/volumes")

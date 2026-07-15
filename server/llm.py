@@ -121,3 +121,23 @@ async def structured_vision(provider_id: str | None, prompt: str, image: bytes, 
             response.raise_for_status()
             text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
     return _json(text), provider
+
+
+async def structured_text(provider_id: str | None, prompt: str, schema: dict) -> tuple[dict, Provider]:
+    provider = resolve(provider_id)
+    if provider.id == "mock": return {"interpretation": "Mock explanation", "breakdown": [], "uncertainty": "Mock provider"}, provider
+    async with httpx.AsyncClient(timeout=90) as client:
+        if provider.id == "openai":
+            response = await client.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {provider.key}", "Content-Type": "application/json"}, json={
+                "model": provider.model, "input": prompt,
+                "text": {"format": {"type": "json_schema", "name": "grammar_explanation", "strict": True, "schema": schema}},
+            }); response.raise_for_status(); payload = response.json(); text = payload.get("output_text") or payload["output"][0]["content"][0]["text"]
+        elif provider.id == "anthropic":
+            response = await client.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": provider.key or "", "anthropic-version": "2023-06-01", "Content-Type": "application/json"}, json={
+                "model": provider.model, "max_tokens": 2048, "messages": [{"role": "user", "content": prompt + "\nReturn only JSON matching:\n" + json.dumps(schema)}],
+            }); response.raise_for_status(); text = response.json()["content"][0]["text"]
+        else:
+            response = await client.post(f"https://generativelanguage.googleapis.com/v1beta/models/{provider.model}:generateContent", headers={"x-goog-api-key": provider.key or "", "Content-Type": "application/json"}, json={
+                "contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json", "responseJsonSchema": schema},
+            }); response.raise_for_status(); text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+    return _json(text), provider

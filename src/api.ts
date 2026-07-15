@@ -1,4 +1,4 @@
-import type { DictionaryResult, LensAnalysis, LlmStatus, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume } from './types'
+import type { DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume } from './types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options)
@@ -12,6 +12,8 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export const api = {
   volumes: () => request<Volume[]>('/api/volumes'),
   dictionary: (query: string) => request<DictionaryResult>(`/api/dictionary?q=${encodeURIComponent(query)}`),
+  grammar: (sentence: string, focus: string) => request<GrammarAnalysis>(`/api/grammar?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
+  explainGrammar: (sentence: string, focus: string, provider?: string) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null})}),
   llmStatus: () => request<LlmStatus>('/api/llm/status'),
   reader: (id: string) => request<ReaderData>(`/api/volumes/${id}/reader`),
   importLocal: (path: string, title?: string, series?: string) =>

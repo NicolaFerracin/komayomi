@@ -1,18 +1,31 @@
-import { BookMarked, LoaderCircle, X } from 'lucide-react'
+import { BookMarked, Braces, LoaderCircle, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import type { DictionaryResult, RubySpan } from '../types'
+import type { DictionaryResult, GrammarAnalysis, GrammarExplanation, LlmStatus, RubySpan } from '../types'
 
-export function LookupPanel({ query, rubySpans = [], onClose }: { query: string; rubySpans?: RubySpan[]; onClose: () => void }) {
+export function LookupPanel({ query, sentence = query, rubySpans = [], onClose }: { query: string; sentence?: string; rubySpans?: RubySpan[]; onClose: () => void }) {
   const [result, setResult] = useState<DictionaryResult | null>(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [grammar, setGrammar] = useState<GrammarAnalysis | null>(null)
+  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null)
+  const [provider, setProvider] = useState('')
+  const [explanation, setExplanation] = useState<GrammarExplanation | null>(null)
+  const [explaining, setExplaining] = useState(false)
   useEffect(() => {
     let active = true
     setResult(null); setError('')
-    api.dictionary(query).then((data) => active && setResult(data)).catch((reason) => active && setError(reason.message))
+    Promise.all([api.dictionary(query), api.grammar(sentence, query)]).then(([dictionary, analysis]) => { if (active) { setResult(dictionary); setGrammar(analysis) } }).catch((reason) => active && setError(reason.message))
     return () => { active = false }
-  }, [query])
+  }, [query, sentence])
+  useEffect(() => { api.llmStatus().then((status) => { setLlmStatus(status); setProvider(status.providers.find((item) => item.id === status.preferred && item.configured)?.id || status.providers.find((item) => item.configured)?.id || '') }).catch(() => undefined) }, [])
+
+  async function explain() {
+    setExplaining(true); setError('')
+    try { setExplanation(await api.explainGrammar(sentence, query, provider)) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not explain this usage.') }
+    finally { setExplaining(false) }
+  }
 
   return (
     <aside className="tool-panel lookup-panel">
@@ -21,6 +34,7 @@ export function LookupPanel({ query, rubySpans = [], onClose }: { query: string;
       {error && <div className="error-note">{error}</div>}
       {result && <>
         {result.tokens.length > 1 && <div className="token-strip">{result.tokens.map((token, index) => { const printed = printedReadings(result, rubySpans)[index]; return <span key={index} className={printed ? 'has-printed-reading' : ''} title={`${token.part_of_speech}${token.inflection ? ` · ${token.inflection}` : ''}`}>{token.surface}<small>{printed || token.reading}</small>{printed && <i>printed</i>}</span> })}</div>}
+        {grammar && <section className="grammar-context"><div className="section-rule"><span>IN THIS SENTENCE</span></div>{grammar.matches.map((match, index) => <article key={`${match.form}-${index}`}><div className="grammar-context__head"><Braces size={16}/><div><strong>{match.span}</strong><span>{match.title}</span></div><i>{Math.round(match.confidence * 100)}% · local</i></div><p>{match.explanation}</p><blockquote>{match.translation_hint}</blockquote></article>)}{!grammar.matches.length && <p className="muted">No known local grammar pattern matched this selection. Word definitions are still shown below.</p>}<div className="grammar-ai"><div><ShieldCheck size={14}/><span>No text is shared unless you click.</span></div>{llmStatus && <select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">No AI provider configured</option>{llmStatus.providers.map((item) => <option key={item.id} value={item.id} disabled={!item.configured}>{item.name} · {item.model}</option>)}</select>}<button className="secondary-button" disabled={!provider || explaining} onClick={explain}>{explaining ? <LoaderCircle className="spin" size={15}/> : <Sparkles size={15}/>} Explain this usage with AI</button></div>{explanation && <div className="grammar-explanation"><span>{explanation.provider} · {explanation.model}</span><p>{explanation.explanation.interpretation}</p>{explanation.explanation.breakdown.map((part, index) => <dl key={index}><dt>{part.part}</dt><dd>{part.role}</dd></dl>)}{explanation.explanation.uncertainty && <small>Uncertainty: {explanation.explanation.uncertainty}</small>}</div>}</section>}
         <div className="dictionary-entries">
           {result.entries.map((entry, index) => <article className="dictionary-entry" key={entry.id}>
             <div className="dictionary-entry__head"><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{printedForm(entry, result)}</strong><em>{entry.readings.join('、')}</em></div>{entry.matched_by !== printedForm(entry, result) && <i>dictionary form {entry.matched_by}</i>}</div>
