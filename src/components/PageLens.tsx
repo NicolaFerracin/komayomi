@@ -1,9 +1,10 @@
 import { Eye, LoaderCircle, MessageCircle, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import type { LensAnalysis, LlmStatus, PageVisionProposal } from '../types'
+import type { LensAnalysis, LlmStatus, MangaPage, PageVisionProposal } from '../types'
+import { preferredProvider } from '../preferences'
 
-export function PageLens({ volumeId, page, onClose, onPageApplied }: { volumeId: string; page: number; onClose: () => void; onPageApplied: () => void }) {
+export function PageLens({ volumeId, page, pageData, onClose, onPageApplied }: { volumeId: string; page: number; pageData: MangaPage; onClose: () => void; onPageApplied: () => void }) {
   const [status, setStatus] = useState<LlmStatus | null>(null)
   const [provider, setProvider] = useState('')
   const [includeNext, setIncludeNext] = useState(false)
@@ -13,7 +14,7 @@ export function PageLens({ volumeId, page, onClose, onPageApplied }: { volumeId:
   const [busy, setBusy] = useState(false)
   const [pageVision, setPageVision] = useState<PageVisionProposal | null>(null)
   const [visionBusy, setVisionBusy] = useState(false)
-  useEffect(() => { api.llmStatus().then((value) => { setStatus(value); setProvider(value.providers.find((p) => p.id === value.preferred && p.configured)?.id || value.providers.find((p) => p.configured)?.id || '') }).catch((error) => setMessage(error.message)) }, [])
+  useEffect(() => { api.llmStatus().then((value) => { setStatus(value); setProvider(preferredProvider(value)) }).catch((error) => setMessage(error.message)) }, [])
   async function analyze() {
     setBusy(true); setMessage('')
     try { setResult(await api.pageLens(volumeId, page, provider, includeNext, question)) }
@@ -42,7 +43,7 @@ export function PageLens({ volumeId, page, onClose, onPageApplied }: { volumeId:
       {message && <div className="error-note">{message}</div>}
       <button className="lens-button" onClick={analyze} disabled={busy || !provider}>{busy ? <><LoaderCircle className="spin" size={17}/> Analyzing…</> : <><Sparkles size={17}/>{result ? 'Analyze again' : 'Analyze this page'}</>}</button>
       <div className="page-vision-action"><div><strong>OCR &amp; layout repair</strong><span>Find all regions and their reading direction. You review before replacing Mokuro’s result.</span></div><button className="secondary-button" onClick={reprocessPage} disabled={visionBusy || !provider}>{visionBusy ? <LoaderCircle className="spin" size={15}/> : <Eye size={15}/>} Re-read full page</button></div>
-      {pageVision && <section className="page-vision-proposal"><span className="eyebrow">PAGE PROPOSAL · NOT APPLIED</span><h3>{pageVision.proposal.summary}</h3><p>{pageVision.proposal.blocks.length} text regions found · {pageVision.proposal.blocks.filter((block) => block.vertical).length} vertical · {pageVision.proposal.blocks.filter((block) => !block.vertical).length} horizontal</p><div>{pageVision.proposal.blocks.slice(0, 8).map((block, index) => <span key={index}><b>{index + 1}</b>{block.lines.map((line) => line.text).join(' / ')}</span>)}</div><button className="primary-button" onClick={applyPage}><Sparkles size={15}/> Replace page regions</button><button className="text-button" onClick={() => setPageVision(null)}>Discard proposal</button></section>}
+      {pageVision && <section className="page-vision-proposal"><span className="eyebrow">PAGE PROPOSAL · NOT APPLIED</span><h3>{pageVision.proposal.summary}</h3><p>{pageVision.proposal.blocks.length} text regions found · {pageVision.proposal.blocks.filter((block) => block.vertical).length} vertical · {pageVision.proposal.blocks.filter((block) => !block.vertical).length} horizontal</p><div className="page-vision-map"><img src={pageData.image_url} alt="Proposed OCR layout"/>{pageVision.proposal.blocks.map((block, index) => <i key={index} title={block.lines.map((line) => line.text).join(' / ')} style={{left:`${block.box[0]/10}%`,top:`${block.box[1]/10}%`,width:`${(block.box[2]-block.box[0])/10}%`,height:`${(block.box[3]-block.box[1])/10}%`}}><b>{index+1}</b></i>)}</div><div className="page-vision-transcript">{pageVision.proposal.blocks.map((block, index) => <span key={index}><b>{index + 1}</b>{block.lines.map((line) => line.text).join(' / ')}</span>)}</div><button className="primary-button" onClick={applyPage}><Sparkles size={15}/> Replace page regions</button><button className="text-button" onClick={() => setPageVision(null)}>Discard proposal</button></section>}
       {result && <section className="lens-results"><div className="lens-result-meta">{result.provider} · {result.model}{result.cached && ' · cached'}</div><h3>{result.analysis.summary}</h3>{result.analysis.notes.map((note, index) => <article key={index}><span>{note.type} · {Math.round(note.confidence * 100)}%</span><h4>{note.title}</h4><p>{note.explanation}</p><blockquote>{note.evidence}</blockquote></article>)}{!result.analysis.notes.length && <p className="muted">Nothing noteworthy was found on this page—and that is a useful answer too.</p>}</section>}
     </aside>
   )

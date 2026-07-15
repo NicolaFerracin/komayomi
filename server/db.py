@@ -75,6 +75,12 @@ def initialize() -> None:
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (volume_id, page_index, block_index)
             );
+            CREATE TABLE IF NOT EXISTS block_text_overrides (
+                volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
+                block_index INTEGER NOT NULL, lines_json TEXT NOT NULL,
+                ruby_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+                PRIMARY KEY (volume_id, page_index, block_index)
+            );
             """
         )
 
@@ -212,3 +218,15 @@ def save_block_geometry(volume_id: str, page_index: int, block_index: int, box: 
     with connection() as conn:
         conn.execute("INSERT OR REPLACE INTO block_geometry VALUES (?, ?, ?, ?, ?)",
                      (volume_id, page_index, block_index, json.dumps(box), updated_at))
+
+
+def block_text_overrides(volume_id: str) -> dict[tuple[int, int], dict]:
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM block_text_overrides WHERE volume_id=?", (volume_id,)).fetchall()
+    return {(row["page_index"], row["block_index"]): {"lines": json.loads(row["lines_json"]), "ruby": json.loads(row["ruby_json"])} for row in rows}
+
+
+def save_block_text(volume_id: str, page_index: int, block_index: int, lines: list[str], ruby: list[list[dict]], updated_at: str) -> None:
+    with connection() as conn:
+        conn.execute("INSERT OR REPLACE INTO block_text_overrides VALUES (?, ?, ?, ?, ?, ?)",
+                     (volume_id, page_index, block_index, json.dumps(lines, ensure_ascii=False), json.dumps(ruby, ensure_ascii=False), updated_at))

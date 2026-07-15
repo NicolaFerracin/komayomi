@@ -2,6 +2,7 @@ import { BookMarked, Braces, LoaderCircle, ShieldCheck, Sparkles, X } from 'luci
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { DictionaryResult, GrammarAnalysis, GrammarExplanation, LlmStatus, RubySpan } from '../types'
+import { preferredProvider } from '../preferences'
 
 export function LookupPanel({ query, sentence = query, rubySpans = [], onClose }: { query: string; sentence?: string; rubySpans?: RubySpan[]; onClose: () => void }) {
   const [result, setResult] = useState<DictionaryResult | null>(null)
@@ -12,17 +13,18 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], onClose }
   const [provider, setProvider] = useState('')
   const [explanation, setExplanation] = useState<GrammarExplanation | null>(null)
   const [explaining, setExplaining] = useState(false)
+  const [aiRequest, setAiRequest] = useState('')
   useEffect(() => {
     let active = true
     setResult(null); setError('')
     Promise.all([api.dictionary(query), api.grammar(sentence, query)]).then(([dictionary, analysis]) => { if (active) { setResult(dictionary); setGrammar(analysis) } }).catch((reason) => active && setError(reason.message))
     return () => { active = false }
   }, [query, sentence])
-  useEffect(() => { api.llmStatus().then((status) => { setLlmStatus(status); setProvider(status.providers.find((item) => item.id === status.preferred && item.configured)?.id || status.providers.find((item) => item.configured)?.id || '') }).catch(() => undefined) }, [])
+  useEffect(() => { api.llmStatus().then((status) => { setLlmStatus(status); setProvider(preferredProvider(status)) }).catch(() => undefined) }, [])
 
   async function explain() {
     setExplaining(true); setError('')
-    try { setExplanation(await api.explainGrammar(sentence, query, provider)) }
+    try { setExplanation(await api.explainGrammar(sentence, query, provider, aiRequest)) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not explain this usage.') }
     finally { setExplaining(false) }
   }
@@ -34,7 +36,8 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], onClose }
       {error && <div className="error-note">{error}</div>}
       {result && <>
         {result.tokens.length > 1 && <div className="token-strip">{result.tokens.map((token, index) => { const printed = printedReadings(result, rubySpans)[index]; return <span key={index} className={printed ? 'has-printed-reading' : ''} title={`${token.part_of_speech}${token.inflection ? ` · ${token.inflection}` : ''}`}>{token.surface}<small>{printed || token.reading}</small>{printed && <i>printed</i>}</span> })}</div>}
-        {grammar && <section className="grammar-context"><div className="section-rule"><span>IN THIS SENTENCE</span></div>{grammar.matches.map((match, index) => <article key={`${match.form}-${index}`}><div className="grammar-context__head"><Braces size={16}/><div><strong>{match.span}</strong><span>{match.title}</span></div><i>{Math.round(match.confidence * 100)}% · local</i></div><p>{match.explanation}</p><blockquote>{match.translation_hint}</blockquote></article>)}{!grammar.matches.length && <p className="muted">No known local grammar pattern matched this selection. Word definitions are still shown below.</p>}<div className="grammar-ai"><div><ShieldCheck size={14}/><span>No text is shared unless you click.</span></div>{llmStatus && <select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">No AI provider configured</option>{llmStatus.providers.map((item) => <option key={item.id} value={item.id} disabled={!item.configured}>{item.name} · {item.model}</option>)}</select>}<button className="secondary-button" disabled={!provider || explaining} onClick={explain}>{explaining ? <LoaderCircle className="spin" size={15}/> : <Sparkles size={15}/>} Explain this usage with AI</button></div>{explanation && <div className="grammar-explanation"><span>{explanation.provider} · {explanation.model}</span><p>{explanation.explanation.interpretation}</p>{explanation.explanation.breakdown.map((part, index) => <dl key={index}><dt>{part.part}</dt><dd>{part.role}</dd></dl>)}{explanation.explanation.uncertainty && <small>Uncertainty: {explanation.explanation.uncertainty}</small>}</div>}</section>}
+        {grammar && <section className="grammar-context"><div className="section-rule"><span>IN THIS SENTENCE</span></div>{grammar.matches.map((match, index) => <article key={`${match.form}-${index}`}><div className="grammar-context__head"><Braces size={16}/><div><strong>{match.span}</strong><span>{match.title}</span></div><i>{Math.round(match.confidence * 100)}% · local</i></div><p>{match.explanation}</p><blockquote>{match.translation_hint}</blockquote></article>)}{!grammar.matches.length && <p className="muted">No known local grammar pattern matched this selection. You can still ask AI about the complete block below.</p>}</section>}
+        <section className="grammar-ai"><div className="grammar-ai__privacy"><ShieldCheck size={14}/><span>No text is shared unless you click.</span></div><div className="grammar-ai__context"><span>FULL BLOCK CONTEXT</span><p>{sentence}</p>{query !== sentence && <><span>SELECTED FOCUS</span><strong>{query}</strong></>}</div><label><span>YOUR REQUEST <i>optional</i></span><textarea value={aiRequest} onChange={(event) => setAiRequest(event.target.value)} placeholder="e.g. Break down every clause, explain the tone, or focus on のこと"/></label>{llmStatus && <select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">No AI provider configured</option>{llmStatus.providers.map((item) => <option key={item.id} value={item.id} disabled={!item.configured}>{item.name} · {item.model}</option>)}</select>}<button className="secondary-button" disabled={!provider || explaining} onClick={explain}>{explaining ? <LoaderCircle className="spin" size={15}/> : <Sparkles size={15}/>} Explain selected usage in this block</button>{explanation && <div className="grammar-explanation"><span>{explanation.provider} · {explanation.model}</span><p>{explanation.explanation.interpretation}</p>{explanation.explanation.breakdown.map((part, index) => <dl key={index}><dt>{part.part}</dt><dd>{part.role}</dd></dl>)}{explanation.explanation.uncertainty && <small>Uncertainty: {explanation.explanation.uncertainty}</small>}</div>}</section>
         <div className="dictionary-entries">
           {result.entries.map((entry, index) => <article className="dictionary-entry" key={entry.id}>
             <div className="dictionary-entry__head"><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{printedForm(entry, result)}</strong><em>{entry.readings.join('、')}</em></div>{entry.matched_by !== printedForm(entry, result) && <i>dictionary form {entry.matched_by}</i>}</div>
@@ -43,7 +46,7 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], onClose }
           {!result.entries.length && <div className="no-entry">No exact word entry. Individual kanji are shown below.</div>}
         </div>
         {!!result.kanji.length && <section className="kanji-section"><div className="section-rule"><span>KANJI / {result.kanji.length}</span></div>{result.kanji.map((kanji) => <article className="kanji-card" key={kanji.literal}><div className="kanji-card__literal">{kanji.literal}</div><div><strong>{kanji.meanings.slice(0, 5).join(', ')}</strong><dl><dt>ON</dt><dd>{kanji.readings.on.join('、') || '—'}</dd><dt>KUN</dt><dd>{kanji.readings.kun.join('、') || '—'}</dd></dl><div className="kanji-stats"><span>{kanji.strokes} strokes</span>{kanji.grade && <span>grade {kanji.grade}</span>}{kanji.jlpt && <span>JLPT {kanji.jlpt}</span>}</div></div></article>)}</section>}
-        <button className="save-word-button" onClick={async () => { const entry = result.entries[0]; await api.saveItem({ text: entry?.writings[0] || query, reading: entry?.readings[0] || result.tokens[0]?.reading || '', meaning: entry?.senses[0]?.glosses.join('; ') || '', context: query }); setSaved(true) }} disabled={saved}><BookMarked size={16}/> {saved ? 'Saved to study inbox' : 'Save for later'} <span>{saved ? 'ready for export' : 'no review debt'}</span></button>
+        <button className="save-word-button" onClick={async () => { const entry = result.entries[0]; const printed = printedReadings(result, rubySpans); await api.saveItem({ text: query, reading: printed.filter(Boolean).join('') || result.tokens.map((token) => token.reading || '').join(''), meaning: entry?.senses[0]?.glosses.join('; ') || '', context: sentence }); setSaved(true) }} disabled={saved}><BookMarked size={16}/> {saved ? 'Saved to study inbox' : 'Save for later'} <span>{saved ? 'exact printed form saved' : 'no review debt'}</span></button>
       </>}
     </aside>
   )

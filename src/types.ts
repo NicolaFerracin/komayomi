@@ -11,7 +11,7 @@ export type Volume = {
   error: string | null
 }
 
-export type RubySpan = { base: string; reading: string }
+export type RubySpan = { base: string; reading: string; printed?: boolean }
 
 export type TextBlock = {
   box: [number, number, number, number]

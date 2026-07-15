@@ -13,7 +13,7 @@ export const api = {
   volumes: () => request<Volume[]>('/api/volumes'),
   dictionary: (query: string) => request<DictionaryResult>(`/api/dictionary?q=${encodeURIComponent(query)}`),
   grammar: (sentence: string, focus: string) => request<GrammarAnalysis>(`/api/grammar?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
-  explainGrammar: (sentence: string, focus: string, provider?: string) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null})}),
+  explainGrammar: (sentence: string, focus: string, provider?: string, question?: string) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null, question: question || null})}),
   llmStatus: () => request<LlmStatus>('/api/llm/status'),
   reader: (id: string) => request<ReaderData>(`/api/volumes/${id}/reader`),
   importLocal: (path: string, title?: string, series?: string) =>
@@ -44,6 +44,9 @@ export const api = {
   }),
   blockGeometry: (id: string, page: number, block: number, box: number[]) => request<{ok: boolean; box: number[]}>(`/api/volumes/${id}/pages/${page}/blocks/${block}/geometry`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({box}),
+  }),
+  blockText: (id: string, page: number, block: number, lines: string[], ruby: RubySpan[][]) => request<{ok: boolean}>(`/api/volumes/${id}/pages/${page}/blocks/${block}/text`, {
+    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lines, ruby}),
   }),
   visionBlock: (id: string, page: number, block: number, provider?: string) => request<VisionProposal>(`/api/volumes/${id}/pages/${page}/blocks/${block}/vision`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: provider || null }),

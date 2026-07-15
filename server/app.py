@@ -92,9 +92,15 @@ class BlockGeometry(BaseModel):
     box: list[float]
 
 
+class BlockText(BaseModel):
+    lines: list[str]
+    ruby: list[list[dict]]
+
+
 class GrammarExplain(BaseModel):
     sentence: str
     focus: str | None = None
+    question: str | None = None
     provider: str | None = None
 
 
@@ -162,12 +168,15 @@ def apply_saved_text(payload: dict, volume_id: str) -> None:
     corrections = db.corrections_for(volume_id)
     overrides = db.page_overrides(volume_id)
     geometries = db.block_geometries(volume_id)
+    text_overrides = db.block_text_overrides(volume_id)
     for page_index, page in enumerate(payload.get("pages", [])):
         if page_index in overrides:
             page["blocks"] = overrides[page_index]
         for block_index, block in enumerate(page.get("blocks", [])):
             if (page_index, block_index) in geometries:
                 block["box"] = geometries[(page_index, block_index)]
+            if (page_index, block_index) in text_overrides:
+                block.update(text_overrides[(page_index, block_index)])
             for line_index in range(len(block.get("lines", []))):
                 correction = corrections.get((page_index, block_index, line_index))
                 if correction:
@@ -205,6 +214,8 @@ async def explain_grammar(payload: GrammarExplain):
     prompt = f"""Explain the focused Japanese expression as it functions in this exact manga sentence. Do not replace kana with inferred kanji. Separate literal structure from natural meaning, mention ambiguity honestly, and be concise.
 SENTENCE: {payload.sentence}
 FOCUS: {payload.focus or payload.sentence}"""
+    if payload.question:
+        prompt += f"\nREADER REQUEST: {payload.question}"
     try: result, provider = await structured_text(payload.provider, prompt, GRAMMAR_EXPLANATION_SCHEMA)
     except (ValueError, httpx.HTTPError, json.JSONDecodeError) as error: raise HTTPException(503, str(error))
     return {"explanation": result, "provider": provider.id, "model": provider.model}
@@ -263,6 +274,7 @@ def reader(volume_id: str):
     corrections = db.corrections_for(volume_id)
     overrides = db.page_overrides(volume_id)
     geometries = db.block_geometries(volume_id)
+    text_overrides = db.block_text_overrides(volume_id)
     for page_index, page in enumerate(payload["pages"]):
         if page_index in overrides:
             page["blocks"] = overrides[page_index]
@@ -284,8 +296,10 @@ def reader(volume_id: str):
         for block_index, block in enumerate(page["blocks"]):
             if (page_index, block_index) in geometries:
                 block["box"] = geometries[(page_index, block_index)]
-            block["raw_lines"] = list(block["lines"])
-            block["ruby"] = [[] for _ in block["lines"]]
+            block["raw_lines"] = list(block.get("raw_lines", block["lines"]))
+            if (page_index, block_index) in text_overrides:
+                block.update(text_overrides[(page_index, block_index)])
+            block["ruby"] = block.get("ruby") or [[] for _ in block["lines"]]
             for line_index in range(len(block["lines"])):
                 correction = corrections.get((page_index, block_index, line_index))
                 if correction:
@@ -335,6 +349,15 @@ def save_geometry(volume_id: str, page_index: int, block_index: int, payload: Bl
     if box[2] - box[0] < 4 or box[3] - box[1] < 4: raise HTTPException(400, "The text region is too small")
     db.save_block_geometry(volume_id, page_index, block_index, box, now())
     return {"ok": True, "box": box}
+
+
+@app.put("/api/volumes/{volume_id}/pages/{page_index}/blocks/{block_index}/text")
+def save_block_text(volume_id: str, page_index: int, block_index: int, payload: BlockText):
+    require_volume(volume_id)
+    if not payload.lines or len(payload.lines) != len(payload.ruby):
+        raise HTTPException(400, "Each transcription line needs a corresponding ruby list")
+    db.save_block_text(volume_id, page_index, block_index, payload.lines, payload.ruby, now())
+    return {"ok": True}
 
 
 RUBY_SCHEMA = {
@@ -427,7 +450,7 @@ def apply_page_vision(volume_id: str, page_index: int, request: PageOverride):
             "vertical": bool(proposed.get("vertical")), "font_size": max(12, min(width, height) * .025),
             "lines_coords": [], "lines": [line.get("text", "") for line in lines],
             "raw_lines": [line.get("text", "") for line in lines],
-            "ruby": [[{"base": span.get("base", ""), "reading": span.get("reading", "")} for span in line.get("ruby", [])] for line in lines],
+            "ruby": [[{"base": span.get("base", ""), "reading": span.get("reading", ""), "printed": bool(span.get("printed"))} for span in line.get("ruby", [])] for line in lines],
         })
     blocks = repair_contents_layout(blocks, width, height)
     if not blocks: raise HTTPException(400, "The proposal contains no valid text regions")

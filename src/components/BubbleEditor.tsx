@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
 import type { LlmStatus, RubySpan, TextBlock, VisionProposal } from '../types'
+import { preferredProvider } from '../preferences'
 
 export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, onSaved }: {
   volumeId: string
@@ -28,20 +29,18 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
     setMarkups(block.lines.map((line, index) => toMarkup(line, block.ruby[index] || [])))
   }, [block])
 
-  useEffect(() => { api.llmStatus().then((value) => { setStatus(value); setProvider(value.providers.find((p) => p.id === value.preferred && p.configured)?.id || value.providers.find((p) => p.configured)?.id || '') }).catch(() => undefined) }, [])
+  useEffect(() => { api.llmStatus().then((value) => { setStatus(value); setProvider(preferredProvider(value)) }).catch(() => undefined) }, [])
 
   function updateRuby(line: number, raw: string) {
     setMarkups((current) => current.map((item, index) => index === line ? raw : item))
     const spans = Array.from(raw.matchAll(/\{([^{}|]+)\|([^{}]+)\}/g)).map((match) => ({
-      base: match[1].trim(), reading: match[2].trim(),
+      base: match[1].trim(), reading: match[2].trim(), printed: true,
     })).filter((span) => span.base && span.reading)
     setRuby((current) => current.map((item, index) => index === line ? spans : item))
   }
 
   async function save() {
-    await Promise.all(lines.map((line, index) => api.correction(
-      volumeId, pageIndex, blockIndex, index, block.raw_lines[index], line, ruby[index],
-    )))
+    await api.blockText(volumeId, pageIndex, blockIndex, lines, ruby)
     setSaved(true); onSaved(lines, ruby)
     window.setTimeout(() => setSaved(false), 1400)
   }
@@ -56,8 +55,8 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
   function acceptProposal() {
     if (!proposal) return
     const proposed = proposal.proposal.lines
-    const nextLines = lines.map((line, index) => proposed[index]?.text ?? line)
-    const nextRuby = ruby.map((spans, index) => proposed[index]?.ruby.map(({base, reading}) => ({base, reading})) ?? spans)
+    const nextLines = proposed.map((line) => line.text)
+    const nextRuby = proposed.map((line) => line.ruby.map(({base, reading, printed}) => ({base, reading, printed})))
     setLines(nextLines); setRuby(nextRuby); setMarkups(nextLines.map((line, index) => toMarkup(line, nextRuby[index])))
     setProposal(null)
   }
@@ -71,7 +70,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
           <div className="editor-line" key={index}>
             <div className="editor-line__number">{String(index + 1).padStart(2, '0')}</div>
             <label><span>Canonical Japanese</span><textarea value={line} onChange={(e) => setLines((current) => current.map((item, i) => i === index ? e.target.value : item))}/></label>
-            <div className="raw-ocr"><span>RAW OCR</span>{block.raw_lines[index]}</div>
+            <div className="raw-ocr"><span>RAW OCR</span>{block.raw_lines[index] ?? 'New line from vision'}</div>
             <label className="ruby-field"><span>Furigana markup <i>{'{kanji|reading}'} inside the full sentence</i></span><input value={markups[index]} onChange={(e) => updateRuby(index, e.target.value)} placeholder="{食|た}べる"/></label>
             <div className="ruby-preview"><span>PREVIEW</span><p>{renderRuby(lines[index], ruby[index])}</p></div>
           </div>
