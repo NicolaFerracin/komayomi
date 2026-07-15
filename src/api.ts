@@ -40,6 +40,9 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ page_index, block_index, line_index, raw_text, canonical_text, ruby }),
   }),
+  blockGeometry: (id: string, page: number, block: number, box: number[]) => request<{ok: boolean; box: number[]}>(`/api/volumes/${id}/pages/${page}/blocks/${block}/geometry`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({box}),
+  }),
   visionBlock: (id: string, page: number, block: number, provider?: string) => request<VisionProposal>(`/api/volumes/${id}/pages/${page}/blocks/${block}/vision`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: provider || null }),
   }),

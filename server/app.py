@@ -87,6 +87,10 @@ class PageOverride(BaseModel):
     blocks: list[dict]
 
 
+class BlockGeometry(BaseModel):
+    box: list[float]
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -150,10 +154,13 @@ def apply_saved_text(payload: dict, volume_id: str) -> None:
     """Hydrate raw Mokuro metadata with approved page layouts and line edits."""
     corrections = db.corrections_for(volume_id)
     overrides = db.page_overrides(volume_id)
+    geometries = db.block_geometries(volume_id)
     for page_index, page in enumerate(payload.get("pages", [])):
         if page_index in overrides:
             page["blocks"] = overrides[page_index]
         for block_index, block in enumerate(page.get("blocks", [])):
+            if (page_index, block_index) in geometries:
+                block["box"] = geometries[(page_index, block_index)]
             for line_index in range(len(block.get("lines", []))):
                 correction = corrections.get((page_index, block_index, line_index))
                 if correction:
@@ -228,6 +235,7 @@ def reader(volume_id: str):
     payload = reader_payload(volume)
     corrections = db.corrections_for(volume_id)
     overrides = db.page_overrides(volume_id)
+    geometries = db.block_geometries(volume_id)
     for page_index, page in enumerate(payload["pages"]):
         if page_index in overrides:
             page["blocks"] = overrides[page_index]
@@ -247,6 +255,8 @@ def reader(volume_id: str):
             if suspicious_blocks >= 2 else None,
         }
         for block_index, block in enumerate(page["blocks"]):
+            if (page_index, block_index) in geometries:
+                block["box"] = geometries[(page_index, block_index)]
             block["raw_lines"] = list(block["lines"])
             block["ruby"] = [[] for _ in block["lines"]]
             for line_index in range(len(block["lines"])):
@@ -284,6 +294,20 @@ def correction(volume_id: str, payload: Correction):
         payload.raw_text, payload.canonical_text, payload.ruby, now(),
     )
     return {"ok": True}
+
+
+@app.put("/api/volumes/{volume_id}/pages/{page_index}/blocks/{block_index}/geometry")
+def save_geometry(volume_id: str, page_index: int, block_index: int, payload: BlockGeometry):
+    volume = require_volume(volume_id); metadata = reader_payload(volume)
+    if not 0 <= page_index < len(metadata["pages"]): raise HTTPException(404, "Page not found")
+    page = metadata["pages"][page_index]
+    if len(payload.box) != 4: raise HTTPException(400, "A box must contain four coordinates")
+    x1, y1, x2, y2 = payload.box
+    box = [max(0, min(page["img_width"], x1)), max(0, min(page["img_height"], y1)),
+           max(0, min(page["img_width"], x2)), max(0, min(page["img_height"], y2))]
+    if box[2] - box[0] < 4 or box[3] - box[1] < 4: raise HTTPException(400, "The text region is too small")
+    db.save_block_geometry(volume_id, page_index, block_index, box, now())
+    return {"ok": True, "box": box}
 
 
 RUBY_SCHEMA = {

@@ -69,6 +69,12 @@ def initialize() -> None:
                 blocks_json TEXT NOT NULL, updated_at TEXT NOT NULL,
                 PRIMARY KEY (volume_id, page_index)
             );
+            CREATE TABLE IF NOT EXISTS block_geometry (
+                volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
+                block_index INTEGER NOT NULL, box_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (volume_id, page_index, block_index)
+            );
             """
         )
 
@@ -194,3 +200,15 @@ def save_page_override(volume_id: str, page_index: int, blocks: list[dict], upda
     with connection() as conn:
         conn.execute("INSERT OR REPLACE INTO page_overrides VALUES (?, ?, ?, ?)",
                      (volume_id, page_index, json.dumps(blocks, ensure_ascii=False), updated_at))
+
+
+def block_geometries(volume_id: str) -> dict[tuple[int, int], list[float]]:
+    with connection() as conn:
+        rows = conn.execute("SELECT page_index, block_index, box_json FROM block_geometry WHERE volume_id=?", (volume_id,)).fetchall()
+    return {(row["page_index"], row["block_index"]): json.loads(row["box_json"]) for row in rows}
+
+
+def save_block_geometry(volume_id: str, page_index: int, block_index: int, box: list[float], updated_at: str) -> None:
+    with connection() as conn:
+        conn.execute("INSERT OR REPLACE INTO block_geometry VALUES (?, ?, ?, ?, ?)",
+                     (volume_id, page_index, block_index, json.dumps(box), updated_at))

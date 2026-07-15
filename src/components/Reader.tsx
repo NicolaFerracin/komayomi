@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye, Highlighter, Library as LibraryIcon, Pencil, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -24,10 +24,12 @@ function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   return <>{nodes}</>
 }
 
-function BubbleOverlay({ block, pageWidth, pageHeight, onClick, onSelection }: {
+function BubbleOverlay({ block, pageWidth, pageHeight, active, layoutMode, onClick, onSelection, onGeometryChange }: {
   block: TextBlock; pageWidth: number; pageHeight: number; onClick: () => void
   onSelection: (text: string, ruby: RubySpan[], x: number, y: number) => void
+  active: boolean; layoutMode: boolean; onGeometryChange: (box: [number, number, number, number], commit: boolean) => void
 }) {
+  const geometryDrag = useRef<{x: number; y: number; box: [number, number, number, number]; resize: boolean} | null>(null)
   const [rawX1, rawY1, rawX2, rawY2] = block.box
   // Mokuro boxes hug glyphs tightly. Vertical text needs extra room on the
   // trailing (left) edge, where the final column otherwise gets clipped.
@@ -58,8 +60,30 @@ function BubbleOverlay({ block, pageWidth, pageHeight, onClick, onSelection }: {
     event.preventDefault()
     event.clipboardData.setData('text/plain', fragment.textContent || '')
   }
+  function geometryStart(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!layoutMode || event.button !== 0) return
+    event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
+    geometryDrag.current = {x: event.clientX, y: event.clientY, box: [...block.box], resize: Boolean((event.target as Element).closest('.bubble-resize-handle'))}
+  }
+  function geometryMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = geometryDrag.current
+    if (!drag) return
+    const pageRect = event.currentTarget.parentElement!.getBoundingClientRect()
+    const dx = (event.clientX - drag.x) * pageWidth / pageRect.width
+    const dy = (event.clientY - drag.y) * pageHeight / pageRect.height
+    let [bx1, by1, bx2, by2] = drag.box
+    if (drag.resize) { bx2 = Math.max(bx1 + 12, Math.min(pageWidth, bx2 + dx)); by2 = Math.max(by1 + 12, Math.min(pageHeight, by2 + dy)) }
+    else { const width = bx2 - bx1, height = by2 - by1; bx1 = Math.max(0, Math.min(pageWidth - width, bx1 + dx)); by1 = Math.max(0, Math.min(pageHeight - height, by1 + dy)); bx2 = bx1 + width; by2 = by1 + height }
+    onGeometryChange([bx1, by1, bx2, by2], false)
+  }
+  function geometryEnd(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!geometryDrag.current) return
+    event.currentTarget.releasePointerCapture(event.pointerId); geometryDrag.current = null
+    onGeometryChange([...block.box], true)
+  }
   return (
-    <div aria-label="Selectable detected text" className={`bubble-overlay ${block.vertical ? 'vertical' : ''}`} style={style} onDoubleClick={(event) => event.stopPropagation()} onMouseUp={(event) => {
+    <div aria-label={layoutMode ? 'Movable text region' : 'Selectable detected text'} className={`bubble-overlay ${block.vertical ? 'vertical' : ''} ${active ? 'is-pinned' : ''} ${layoutMode ? 'is-layout-editing' : ''}`} style={style} onPointerDown={geometryStart} onPointerMove={geometryMove} onPointerUp={geometryEnd} onPointerCancel={geometryEnd} onDoubleClick={(event) => event.stopPropagation()} onMouseUp={(event) => {
+      if (layoutMode) return
       event.stopPropagation()
       const selection = window.getSelection()
       const text = selection?.toString().trim()
@@ -72,6 +96,7 @@ function BubbleOverlay({ block, pageWidth, pageHeight, onClick, onSelection }: {
         {block.lines.map((line, index) => <Fragment key={index}><span><RubyText text={line} spans={block.ruby[index] || []}/></span></Fragment>)}
       </span>
       <button className="bubble-edit-trigger" aria-label="Edit transcription" title="Edit transcription" onClick={(event) => { event.stopPropagation(); onClick() }}><Pencil size={11}/></button>
+      {layoutMode && <span className="bubble-resize-handle" title="Resize region"/>}
     </div>
   )
 }
@@ -81,11 +106,12 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [pageIndex, setPageIndex] = useState(initialData.current_page)
   const [zoom, setZoom] = useState(1)
   const [showOverlays, setShowOverlays] = useState(true)
+  const [layoutMode, setLayoutMode] = useState(false)
   const [panning, setPanning] = useState(false)
   const [editor, setEditor] = useState<number | null>(null)
   const [lens, setLens] = useState(false)
-  const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]} | null>(null)
-  const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; x: number; y: number} | null>(null)
+  const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; block: number} | null>(null)
+  const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; block: number; x: number; y: number} | null>(null)
   const stageRef = useRef<HTMLElement>(null)
   const dragRef = useRef({ x: 0, y: 0, left: 0, top: 0 })
   const page = data.pages[pageIndex]
@@ -114,6 +140,11 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     setData((current) => ({...current, pages: current.pages.map((item, p) => p !== pageIndex ? item : ({
       ...item, blocks: item.blocks.map((block, b) => b !== editor ? block : ({...block, lines, ruby})),
     }))}))
+  }
+
+  function changeGeometry(blockIndex: number, box: [number, number, number, number], commit: boolean) {
+    setData((current) => ({...current, pages: current.pages.map((item, p) => p !== pageIndex ? item : ({...item, blocks: item.blocks.map((block, b) => b === blockIndex ? {...block, box} : block)}))}))
+    if (commit) api.blockGeometry(data.volume_id, pageIndex, blockIndex, box).catch(() => undefined)
   }
 
   function beginPan(event: ReactPointerEvent<HTMLElement>) {
@@ -167,6 +198,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         <div className="reader-progress"><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></div>
         <div className="reader-tools">
           <button className={showOverlays ? 'active' : ''} onClick={() => setShowOverlays(!showOverlays)} title="Toggle text overlays"><Highlighter size={18}/></button>
+          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { setLayoutMode(!layoutMode); setShowOverlays(true); setEditor(null); setLens(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
           <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
           <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { setLens(!lens); setEditor(null) }}><Eye size={18}/><span>Page Lens</span></button>
@@ -175,6 +207,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       </header>
 
       <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || lookup) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
+        {layoutMode && <div className="layout-mode-banner"><Move size={15}/><div><strong>Layout edit</strong><span>Drag a region to move it · pull its corner to resize · changes save on release</span></div><button onClick={() => setLayoutMode(false)}>Done</button></div>}
         {page.ocr_quality?.suspicious && (
           <div className="ocr-warning">
             <span>OCR uncertain</span>
@@ -188,14 +221,14 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           height: `calc((100vh - 172px) * ${zoom})`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} onSelection={(text, ruby, x, y) => setSelectionAction({text, ruby, x, y})} onClick={() => { setEditor(index); setLens(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, x, y) => setSelectionAction({text, ruby, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
 
       {selectedBlock && <BubbleEditor volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={editor!} block={selectedBlock} onClose={() => setEditor(null)} onSaved={saveBlock}/>} 
       {lens && <PageLens volumeId={data.volume_id} page={pageIndex} onClose={() => setLens(false)} onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}/>} 
-      {selectionAction && !editor && !lens && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={() => { setLookup({text: selectionAction.text, ruby: selectionAction.ruby}); setSelectionAction(null) }}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
+      {selectionAction && !editor && !lens && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={() => { setLookup({text: selectionAction.text, ruby: selectionAction.ruby, block: selectionAction.block}); setSelectionAction(null) }}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
       {lookup && editor === null && !lens && <LookupPanel query={lookup.text} rubySpans={lookup.ruby} onClose={() => setLookup(null)}/>} 
 
       <footer className="reader-footer"><span><LibraryIcon size={14}/> {data.title}</span><span>← next page · previous page →</span><span><BookOpen size={14}/> {pageIndex + 1} / {data.pages.length}</span></footer>
