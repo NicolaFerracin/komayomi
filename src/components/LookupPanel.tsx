@@ -1,35 +1,19 @@
-import { BookMarked, Braces, LoaderCircle, ShieldCheck, Sparkles, X } from 'lucide-react'
+import { BookMarked, Braces, Eye, LoaderCircle, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import type { DictionaryResult, GrammarAnalysis, GrammarExplanation, LlmStatus, RubySpan } from '../types'
-import { preferredProvider } from '../preferences'
+import type { DictionaryResult, GrammarAnalysis, RubySpan } from '../types'
 
-export function LookupPanel({ query, sentence = query, rubySpans = [], onClose }: { query: string; sentence?: string; rubySpans?: RubySpan[]; onClose: () => void }) {
+export function LookupPanel({ query, sentence = query, rubySpans = [], onClose, onAskAI }: { query: string; sentence?: string; rubySpans?: RubySpan[]; onClose: () => void; onAskAI:(sentence:string,focus:string)=>void }) {
   const [result, setResult] = useState<DictionaryResult | null>(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [grammar, setGrammar] = useState<GrammarAnalysis | null>(null)
-  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null)
-  const [provider, setProvider] = useState('')
-  const [explanation, setExplanation] = useState<GrammarExplanation | null>(null)
-  const [explaining, setExplaining] = useState(false)
-  const [aiRequest, setAiRequest] = useState('')
-  const [explanationHistory, setExplanationHistory] = useState<GrammarExplanation[]>([])
   useEffect(() => {
     let active = true
     setResult(null); setError('')
     Promise.all([api.dictionary(query), api.grammar(sentence, query)]).then(([dictionary, analysis]) => { if (active) { setResult(dictionary); setGrammar(analysis) } }).catch((reason) => active && setError(reason.message))
     return () => { active = false }
   }, [query, sentence])
-  useEffect(() => { api.llmStatus().then((status) => { setLlmStatus(status); setProvider(preferredProvider(status)) }).catch(() => undefined) }, [])
-  useEffect(() => { api.grammarExplanationHistory(sentence, query).then((items) => { setExplanationHistory(items); setExplanation(items[0] || null); if (items[0]?.question) setAiRequest(items[0].question) }).catch(() => undefined) }, [sentence, query])
-
-  async function explain() {
-    setExplaining(true); setError('')
-    try { const result = await api.explainGrammar(sentence, query, provider, aiRequest); setExplanation(result); setExplanationHistory((items) => [result, ...items]) }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not explain this usage.') }
-    finally { setExplaining(false) }
-  }
 
   return (
     <aside className="tool-panel lookup-panel">
@@ -39,7 +23,7 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], onClose }
       {result && <>
         {result.tokens.length > 1 && <div className="token-strip">{result.tokens.map((token, index) => { const printed = printedReadings(result, rubySpans)[index]; return <span key={index} className={printed ? 'has-printed-reading' : ''} title={`${token.part_of_speech}${token.inflection ? ` · ${token.inflection}` : ''}`}>{token.surface}<small>{printed || token.reading}</small>{printed && <i>printed</i>}</span> })}</div>}
         {grammar && <section className="grammar-context"><div className="section-rule"><span>IN THIS SENTENCE</span></div>{grammar.matches.map((match, index) => <article key={`${match.form}-${index}`}><div className="grammar-context__head"><Braces size={16}/><div><strong>{match.span}</strong><span>{match.title}</span></div><i>{Math.round(match.confidence * 100)}% · local</i></div><p>{match.explanation}</p><blockquote>{match.translation_hint}</blockquote></article>)}{!grammar.matches.length && <p className="muted">No known local grammar pattern matched this selection. You can still ask AI about the complete block below.</p>}</section>}
-        <section className="grammar-ai"><div className="grammar-ai__privacy"><ShieldCheck size={14}/><span>No text is shared unless you click. Requested explanations are kept locally.</span></div><div className="grammar-ai__context"><span>FULL BLOCK CONTEXT</span><p>{sentence}</p>{query !== sentence && <><span>SELECTED FOCUS</span><strong>{query}</strong></>}</div><label><span>YOUR REQUEST <i>optional</i></span><textarea value={aiRequest} onChange={(event) => setAiRequest(event.target.value)} placeholder="e.g. Break down every clause, explain the tone, or focus on のこと"/></label>{llmStatus && <select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">No AI provider configured</option>{llmStatus.providers.map((item) => <option key={item.id} value={item.id} disabled={!item.configured}>{item.name} · {item.model}</option>)}</select>}<button className="secondary-button" disabled={!provider || explaining} onClick={explain}>{explaining ? <LoaderCircle className="spin" size={15}/> : <Sparkles size={15}/>} Explain selected usage in this block</button>{explanationHistory.length > 1 && <label className="explanation-history"><span>LOCAL EXPLANATION HISTORY</span><select value={explanation?.id || ''} onChange={(event)=>{const selected=explanationHistory.find((item)=>item.id===event.target.value);if(selected){setExplanation(selected);setAiRequest(selected.question||'')}}}>{explanationHistory.map((item)=><option key={item.id} value={item.id}>{new Date(item.created_at).toLocaleString()} · {item.question||'General explanation'}</option>)}</select></label>}{explanation && <div className="grammar-explanation"><span>{explanation.provider} · {explanation.model} · saved locally</span><p>{explanation.explanation.interpretation}</p>{explanation.explanation.breakdown.map((part, index) => <dl key={index}><dt>{part.part}</dt><dd>{part.role}</dd></dl>)}{explanation.explanation.uncertainty && <small>Uncertainty: {explanation.explanation.uncertainty}</small>}</div>}</section>
+        <button className="ask-page-lens" onClick={()=>onAskAI(sentence,query)}><Eye size={17}/><div><strong>Ask Page Lens about this</strong><span>Continue in the page’s AI workspace · past queries stay together</span></div></button>
         <div className="dictionary-entries">
           {result.entries.map((entry, index) => <article className="dictionary-entry" key={entry.id}>
             <div className="dictionary-entry__head"><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{printedForm(entry, result)}</strong><em>{entry.readings.join('、')}</em></div>{entry.matched_by !== printedForm(entry, result) && <i>dictionary form {entry.matched_by}</i>}</div>

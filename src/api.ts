@@ -1,4 +1,4 @@
-import type { DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume } from './types'
+import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume } from './types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options)
@@ -60,6 +60,7 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider: provider || null, include_next, question: question || null }),
   }),
+  aiHistory: (id:string,page:number)=>request<AiHistoryItem[]>(`/api/volumes/${id}/pages/${page}/ai-history`),
   saveItem: (item: {text: string; reading?: string; meaning?: string; volume_id?: string; page_index?: number; context?: string; notes?: string}) =>
     request<SavedItem>('/api/saved-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) }),
   savedItems: () => request<SavedItem[]>('/api/saved-items'),

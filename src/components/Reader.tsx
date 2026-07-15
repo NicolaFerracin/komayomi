@@ -111,6 +111,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [panning, setPanning] = useState(false)
   const [editor, setEditor] = useState<number | null>(null)
   const [lens, setLens] = useState(false)
+  const [lensSeed, setLensSeed] = useState('')
   const [settings, setSettings] = useState(false)
   const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
@@ -206,7 +207,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { setLayoutMode(!layoutMode); setShowOverlays(true); setEditor(null); setLens(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
           <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
-          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { setLens(!lens); setEditor(null) }}><Eye size={18}/><span>Page Lens</span></button>
+          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { setLens(!lens); setLensSeed(''); setEditor(null) }}><Eye size={18}/><span>Page Lens</span></button>
           <button className={settings?'active':''} title="Reader settings" onClick={()=>{setSettings(!settings);setLens(false);setEditor(null);setLookup(null)}}><Settings2 size={18}/></button>
         </div>
       </header>
@@ -236,12 +237,13 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         volumeId={data.volume_id}
         page={pageIndex}
         pageData={page}
+        initialQuestion={lensSeed}
         onClose={() => setLens(false)}
         onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {selectionAction && !editor && !lens && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={() => { setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block}); setSelectionAction(null) }}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
-      {lookup && editor === null && !lens && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)}/>}
+      {lookup && editor === null && !lens && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
 
       <footer className="reader-footer"><span><LibraryIcon size={14}/> {data.title}</span><span>← next page · previous page →</span><span><BookOpen size={14}/> {pageIndex + 1} / {data.pages.length}</span></footer>
     </main>

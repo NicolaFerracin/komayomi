@@ -247,3 +247,17 @@ def grammar_explanations(sentence: str, focus: str) -> list[dict]:
     with connection() as conn:
         rows = conn.execute("SELECT * FROM grammar_explanations WHERE sentence=? AND focus=? ORDER BY created_at DESC", (sentence, focus)).fetchall()
     return [{**dict(row), "explanation": json.loads(row["result_json"])} for row in rows]
+
+
+def grammar_explanations_for_sentences(sentences: list[str]) -> list[dict]:
+    if not sentences: return []
+    placeholders = ",".join("?" for _ in sentences)
+    with connection() as conn:
+        rows = conn.execute(f"SELECT * FROM grammar_explanations WHERE sentence IN ({placeholders}) ORDER BY created_at DESC", sentences).fetchall()
+    return [{**dict(row), "explanation": json.loads(row["result_json"])} for row in rows]
+
+
+def lens_history(volume_id: str, page_index: int) -> list[dict]:
+    with connection() as conn:
+        rows = conn.execute("SELECT cache_key, result_json, created_at FROM lens_analyses WHERE volume_id=? AND page_index=? ORDER BY created_at DESC", (volume_id, page_index)).fetchall()
+    return [{"id": row["cache_key"], "created_at": row["created_at"], **json.loads(row["result_json"])} for row in rows]

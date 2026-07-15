@@ -570,9 +570,29 @@ async def analyze_page(volume_id: str, page_index: int, request: LensRequest):
         result, provider = await structured_vision(request.provider, prompt, image_bytes, mime, LENS_SCHEMA)
     except (ValueError, httpx.HTTPError, json.JSONDecodeError) as error:
         raise HTTPException(503, str(error))
-    response = {"analysis": result, "provider": provider.id, "model": provider.model, "cached": False}
+    response = {"analysis": result, "provider": provider.id, "model": provider.model, "cached": False,
+                "question": request.question, "include_next": request.include_next}
     db.save_lens_analysis(volume_id, page_index, cache_key, response, now())
     return response
+
+
+@app.get("/api/volumes/{volume_id}/pages/{page_index}/ai-history")
+def ai_history(volume_id: str, page_index: int):
+    volume = require_volume(volume_id); payload = reader_payload(volume); apply_saved_text(payload, volume_id)
+    if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404, "Page not found")
+    sentences = ["".join(block.get("lines", [])) for block in payload["pages"][page_index].get("blocks", [])]
+    items = []
+    for saved in db.grammar_explanations_for_sentences(sentences):
+        explanation = saved["explanation"]
+        items.append({"id": saved["id"], "kind": "selection", "question": saved.get("question") or f"Explain {saved['focus']}",
+                      "focus": saved["focus"], "answer": explanation.get("interpretation", ""), "provider": saved["provider"],
+                      "model": saved["model"], "created_at": saved["created_at"]})
+    for saved in db.lens_history(volume_id, page_index):
+        analysis = saved.get("analysis", {})
+        items.append({"id": saved["id"], "kind": "page", "question": saved.get("question") or "Analyze this page",
+                      "focus": None, "answer": analysis.get("summary", ""), "provider": saved.get("provider", ""),
+                      "model": saved.get("model", ""), "created_at": saved["created_at"]})
+    return sorted(items, key=lambda item: item["created_at"], reverse=True)
 
 
 @app.get("/api/saved-items")
