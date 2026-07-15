@@ -133,6 +133,12 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
+  function openLookup() {
+    if (!selectionAction) return
+    setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block})
+    setEditor(null); setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
+  }
+
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
@@ -251,8 +257,8 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {navigator && <PageNavigator pages={data.pages} current={pageIndex} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
-      {selectionAction && !editor && !lens && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={() => { setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block}); setSelectionAction(null) }}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
-      {lookup && editor === null && !lens && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
+      {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
+      {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
 
       <footer className="reader-footer"><span><LibraryIcon size={14}/> {data.title}</span><span>← next page · previous page →</span><span><BookOpen size={14}/> {pageIndex + 1} / {data.pages.length}</span></footer>
     </main>
