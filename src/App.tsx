@@ -33,12 +33,17 @@ export default function App() {
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not open volume') }
   }
 
+  async function openSaved(volumeId:string,pageIndex:number) {
+    try { const data=await api.reader(volumeId);await api.position(volumeId,pageIndex);setStudying(false);setReader({...data,current_page:pageIndex}) }
+    catch (reason) { setError(reason instanceof Error?reason.message:'Could not open the saved page') }
+  }
+
   if (reader) return <Reader data={reader} onExit={() => { setReader(null); refresh() }}/>
   return <>
     {error && <div className="global-error">{error}</div>}
     <Library volumes={volumes} onImport={() => setImporting(true)} onStudy={() => setStudying(true)} onEdit={setEditing} onOpen={open}/>
     {importing && <ImportDialog onClose={() => setImporting(false)} onImported={(volume) => { setVolumes((items) => [volume, ...items]); setImporting(false) }}/>} 
-    {studying && <StudyInbox onClose={() => setStudying(false)}/>} 
+    {studying && <StudyInbox onClose={() => setStudying(false)} onOpenSource={openSaved}/>}
     {editing && <EditVolumeDialog volume={editing} onClose={()=>setEditing(null)} onSaved={(updated)=>{setVolumes((items)=>items.map((item)=>item.id===updated.id?updated:item));setEditing(null)}}/>}
   </>
 }
