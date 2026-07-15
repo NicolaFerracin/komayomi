@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookOpen, ChevronLeft, ChevronRight, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookOpen, ChevronLeft, ChevronRight, CircleHelp, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -10,6 +10,7 @@ import { PageLens } from './PageLens'
 import { LookupPanel } from './LookupPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { PageNavigator } from './PageNavigator'
+import { ShortcutGuide } from './ShortcutGuide'
 
 function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   if (!spans.length) return <>{text}</>
@@ -116,6 +117,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [settings, setSettings] = useState(false)
   const [navigator, setNavigator] = useState(false)
   const [bookmarks, setBookmarks] = useState<Set<number>>(new Set())
+  const [shortcuts, setShortcuts] = useState(false)
   const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
   const [layoutHistory, setLayoutHistory] = useState<Array<{page:number;block:number;box:[number,number,number,number]}>>([])
@@ -152,9 +154,18 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key === 'ArrowLeft') move(1)
       if (event.key === 'ArrowRight') move(-1)
-      if (event.key === 'Escape' && (editor !== null || lens || navigator)) { setEditor(null); setLens(false); setNavigator(false) }
+      if (event.key === 'Escape') { setEditor(null); setLens(false); setNavigator(false); setSettings(false); setLookup(null); setShortcuts(false) }
+      if (event.key === '?' ) setShortcuts((value)=>!value)
+      if (event.key.toLowerCase() === 'g') { setNavigator(true); setLens(false); setEditor(null); setSettings(false); setLookup(null) }
+      if (event.key.toLowerCase() === 'l') { setLens(true); setLensSeed(''); setNavigator(false); setEditor(null); setSettings(false) }
+      if (event.key.toLowerCase() === 'b') toggleBookmark()
+      if (event.key.toLowerCase() === 'o') setShowOverlays((value)=>!value)
+      if (event.key === '+' || event.key === '=') zoomAt(zoom + .1)
+      if (event.key === '-') zoomAt(zoom - .1)
+      if (event.key === '0') zoomAt(1)
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
@@ -234,6 +245,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <button className={navigator?'active':''} title="Browse pages" onClick={()=>{setNavigator(!navigator);setLens(false);setEditor(null);setLookup(null);setSettings(false)}}><Grid3X3 size={18}/></button>
           <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
           <button className={settings?'active':''} title="Reader settings" onClick={()=>{setSettings(!settings);setLens(false);setNavigator(false);setEditor(null);setLookup(null)}}><Settings2 size={18}/></button>
+          <button title="Keyboard shortcuts (?)" onClick={()=>setShortcuts(true)}><CircleHelp size={18}/></button>
         </div>
       </header>
 
@@ -268,6 +280,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {navigator && <PageNavigator pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
+      {shortcuts && <ShortcutGuide onClose={()=>setShortcuts(false)}/>}
       {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
       {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
 

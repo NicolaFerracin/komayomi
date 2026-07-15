@@ -64,6 +64,7 @@ export const api = {
     body: JSON.stringify({ provider: provider || null, include_next, question: question || null }),
   }),
   aiHistory: (id:string,page:number)=>request<AiHistoryItem[]>(`/api/volumes/${id}/pages/${page}/ai-history`, {cache:'no-store'}),
+  deleteAiHistory: (id:string,page:number,kind:AiHistoryItem['kind'],item:string)=>request<{ok:boolean}>(`/api/volumes/${id}/pages/${page}/ai-history/${kind}/${item}`, {method:'DELETE'}),
   saveItem: (item: {text: string; reading?: string; meaning?: string; volume_id?: string; page_index?: number; context?: string; notes?: string}) =>
     request<SavedItem>('/api/saved-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) }),
   savedItems: () => request<SavedItem[]>('/api/saved-items'),

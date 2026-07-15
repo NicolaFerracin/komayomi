@@ -616,6 +616,16 @@ def ai_history(volume_id: str, page_index: int, response: Response):
     return sorted(items, key=lambda item: item["created_at"], reverse=True)
 
 
+@app.delete("/api/volumes/{volume_id}/pages/{page_index}/ai-history/{kind}/{item_id}")
+def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str):
+    volume = require_volume(volume_id); payload = reader_payload(volume); apply_saved_text(payload, volume_id)
+    if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404, "Page not found")
+    if kind not in {"selection", "page"}: raise HTTPException(400, "Unknown history type")
+    sentences = ["".join(block.get("lines", [])) for block in payload["pages"][page_index].get("blocks", [])]
+    if not db.delete_ai_history(volume_id, page_index, kind, item_id, sentences): raise HTTPException(404, "Saved query not found")
+    return {"ok": True}
+
+
 @app.get("/api/saved-items")
 def list_saved_items():
     return db.saved_items()

@@ -282,3 +282,14 @@ def lens_history(volume_id: str, page_index: int) -> list[dict]:
     with connection() as conn:
         rows = conn.execute("SELECT cache_key, result_json, created_at FROM lens_analyses WHERE volume_id=? AND page_index=? ORDER BY created_at DESC", (volume_id, page_index)).fetchall()
     return [{"id": row["cache_key"], "created_at": row["created_at"], **json.loads(row["result_json"])} for row in rows]
+
+
+def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str, sentences: list[str]) -> bool:
+    with connection() as conn:
+        if kind == "selection":
+            if not sentences: return False
+            placeholders = ",".join("?" for _ in sentences)
+            cursor = conn.execute(f"DELETE FROM grammar_explanations WHERE id=? AND sentence IN ({placeholders})", [item_id, *sentences])
+        else:
+            cursor = conn.execute("DELETE FROM lens_analyses WHERE volume_id=? AND page_index=? AND cache_key=?", (volume_id, page_index, item_id))
+    return cursor.rowcount > 0
