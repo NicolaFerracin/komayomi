@@ -31,6 +31,7 @@ export type MangaPage = {
   blocks: TextBlock[]
   ocr_quality: {
     suspicious: boolean
+    reviewed: boolean
     flagged_blocks: number
     reason: string | null
   }

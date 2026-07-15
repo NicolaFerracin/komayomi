@@ -91,6 +91,11 @@ def initialize() -> None:
                 created_at TEXT NOT NULL,
                 PRIMARY KEY (volume_id, page_index)
             );
+            CREATE TABLE IF NOT EXISTS page_reviews (
+                volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
+                reviewed_at TEXT NOT NULL,
+                PRIMARY KEY (volume_id, page_index)
+            );
             """
         )
 
@@ -142,6 +147,17 @@ def save_bookmark(volume_id: str, page_index: int, created_at: str) -> None:
 def delete_bookmark(volume_id: str, page_index: int) -> None:
     with connection() as db:
         db.execute("DELETE FROM page_bookmarks WHERE volume_id=? AND page_index=?", (volume_id, page_index))
+
+
+def reviewed_pages(volume_id: str) -> set[int]:
+    with connection() as db:
+        rows = db.execute("SELECT page_index FROM page_reviews WHERE volume_id=?", (volume_id,)).fetchall()
+    return {row["page_index"] for row in rows}
+
+
+def review_page(volume_id: str, page_index: int, reviewed_at: str) -> None:
+    with connection() as db:
+        db.execute("INSERT OR REPLACE INTO page_reviews VALUES (?, ?, ?)", (volume_id, page_index, reviewed_at))
 
 
 def corrections_for(volume_id: str) -> dict[tuple[int, int, int], dict]:

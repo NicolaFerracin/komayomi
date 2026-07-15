@@ -165,6 +165,11 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     action.catch(()=>setBookmarks((current)=>{const next=new Set(current);active?next.add(pageIndex):next.delete(pageIndex);return next}))
   }
 
+  async function markReviewed() {
+    await api.reviewPage(data.volume_id,pageIndex)
+    setData((current)=>({...current,pages:current.pages.map((item,index)=>index===pageIndex?{...item,ocr_quality:{...item.ocr_quality,reviewed:true}}:item)}))
+  }
+
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
@@ -265,11 +270,11 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
 
       <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || lookup || settings || navigator) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
         {layoutMode && <div className="layout-mode-banner"><Move size={15}/><div><strong>Layout edit</strong><span>Drag a region to move it · pull its corner to resize · changes save on release</span></div><button onClick={undoLayout} disabled={!layoutHistory.length}><Undo2 size={13}/> Undo</button><button onClick={() => setLayoutMode(false)}>Done</button></div>}
-        {page.ocr_quality?.suspicious && (
+        {page.ocr_quality?.suspicious && !page.ocr_quality.reviewed && (
           <div className="ocr-warning">
             <span>OCR uncertain</span>
             <p>This page has overlapping or unusually large text regions.</p>
-            <button onClick={() => { if(!closeEditor())return;setLens(true) }}>Page-level vision will help</button>
+            <div><button onClick={() => { if(!closeEditor())return;setLens(true) }}>Repair with Page Lens</button><button onClick={markReviewed}>Mark reviewed</button></div>
           </div>
         )}
         <button className="page-turn page-turn--prev" onClick={() => move(-1)} disabled={pageIndex === 0}><ChevronRight/></button>

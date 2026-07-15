@@ -182,6 +182,7 @@ def apply_saved_text(payload: dict, volume_id: str) -> None:
     overrides = db.page_overrides(volume_id)
     geometries = db.block_geometries(volume_id)
     text_overrides = db.block_text_overrides(volume_id)
+    reviewed = db.reviewed_pages(volume_id)
     for page_index, page in enumerate(payload.get("pages", [])):
         if page_index in overrides:
             page["blocks"] = overrides[page_index]
@@ -327,6 +328,7 @@ def reader(volume_id: str):
                 suspicious_blocks += 1
         page["ocr_quality"] = {
             "suspicious": suspicious_blocks >= 2,
+            "reviewed": page_index in reviewed,
             "flagged_blocks": suspicious_blocks,
             "reason": "The text detector found unusually large or overlapping regions. Page-level vision OCR is recommended."
             if suspicious_blocks >= 2 else None,
@@ -371,6 +373,14 @@ def position(volume_id: str, payload: Position):
 def bookmarks(volume_id: str):
     require_volume(volume_id)
     return db.bookmarks(volume_id)
+
+
+@app.put("/api/volumes/{volume_id}/pages/{page_index}/reviewed")
+def mark_page_reviewed(volume_id: str, page_index: int):
+    volume = require_volume(volume_id)
+    if not 0 <= page_index < volume.page_count: raise HTTPException(404, "Page not found")
+    db.review_page(volume_id, page_index, now())
+    return {"ok": True}
 
 
 @app.put("/api/volumes/{volume_id}/bookmarks/{page_index}")
@@ -517,6 +527,7 @@ def apply_page_vision(volume_id: str, page_index: int, request: PageOverride):
     blocks = repair_contents_layout(blocks, width, height)
     if not blocks: raise HTTPException(400, "The proposal contains no valid text regions")
     db.save_page_override(volume_id, page_index, blocks, now())
+    db.review_page(volume_id, page_index, now())
     return {"ok": True, "blocks": blocks}
 
 
