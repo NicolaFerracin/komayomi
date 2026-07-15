@@ -202,6 +202,11 @@ def review_page(volume_id: str, page_index: int, reviewed_at: str) -> None:
         db.execute("INSERT OR REPLACE INTO page_reviews VALUES (?, ?, ?)", (volume_id, page_index, reviewed_at))
 
 
+def unreview_page(volume_id: str, page_index: int) -> None:
+    with connection() as db:
+        db.execute("DELETE FROM page_reviews WHERE volume_id=? AND page_index=?", (volume_id, page_index))
+
+
 def corrections_for(volume_id: str) -> dict[tuple[int, int, int], dict]:
     with connection() as db:
         rows = db.execute(

@@ -446,6 +446,12 @@ def mark_page_reviewed(volume_id: str, page_index: int):
     return {"ok": True}
 
 
+@app.delete("/api/volumes/{volume_id}/pages/{page_index}/reviewed")
+def reopen_page_review(volume_id: str, page_index: int):
+    require_volume(volume_id); db.unreview_page(volume_id, page_index)
+    return {"ok": True}
+
+
 @app.put("/api/volumes/{volume_id}/bookmarks/{page_index}")
 def add_bookmark(volume_id: str, page_index: int):
     volume = require_volume(volume_id)

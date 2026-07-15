@@ -44,6 +44,7 @@ export const api = {
   addBookmark: (id: string, page: number) => request<{ok:boolean}>(`/api/volumes/${id}/bookmarks/${page}`, {method:'PUT'}),
   removeBookmark: (id: string, page: number) => request<{ok:boolean}>(`/api/volumes/${id}/bookmarks/${page}`, {method:'DELETE'}),
   reviewPage: (id:string,page:number)=>request<{ok:boolean}>(`/api/volumes/${id}/pages/${page}/reviewed`,{method:'PUT'}),
+  unreviewPage: (id:string,page:number)=>request<{ok:boolean}>(`/api/volumes/${id}/pages/${page}/reviewed`,{method:'DELETE'}),
   correction: (
     id: string, page_index: number, block_index: number, line_index: number,
     raw_text: string, canonical_text: string, ruby: RubySpan[],

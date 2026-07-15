@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookOpen, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -176,6 +176,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     await api.reviewPage(data.volume_id,pageIndex)
     setData((current)=>({...current,pages:current.pages.map((item,index)=>index===pageIndex?{...item,ocr_quality:{...item.ocr_quality,reviewed:true}}:item)}))
   }
+  async function reopenReview(){await api.unreviewPage(data.volume_id,pageIndex);setData((current)=>({...current,pages:current.pages.map((item,index)=>index===pageIndex?{...item,ocr_quality:{...item.ocr_quality,reviewed:false}}:item)}))}
 
   function reopenLookup(item:RecentLookup){if(!closeEditor())return;setPageIndex(item.page);api.position(data.volume_id,item.page).catch(()=>undefined);setLookup({text:item.text,context:item.context,ruby:[],block:-1});setLookupHistory(false);setLens(false);setNavigator(false);setSettings(false)}
 
@@ -290,6 +291,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
             <div><button onClick={() => { if(!closeEditor())return;setLens(true) }}>Repair with Page Lens</button><button onClick={markReviewed}>Mark reviewed</button></div>
           </div>
         )}
+        {page.ocr_quality?.suspicious&&page.ocr_quality.reviewed&&<div className="ocr-reviewed-chip"><Check size={12}/> OCR reviewed <button onClick={reopenReview}>Reopen issue</button></div>}
         <button className="page-turn page-turn--prev" onClick={() => move(-1)} disabled={pageIndex === 0}><ChevronRight/></button>
         <div className="page-wrap" style={{
           width: `calc((100vh - 172px) * ${page.img_width / page.img_height} * ${zoom})`,
