@@ -12,6 +12,8 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export const api = {
   volumes: () => request<Volume[]>('/api/volumes'),
   updateVolume: (id: string, title: string, series: string) => request<Volume>(`/api/volumes/${id}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,series})}),
+  processVolume: (id:string)=>request<Volume>(`/api/volumes/${id}/process`,{method:'POST'}),
+  pauseVolume: (id:string)=>request<Volume>(`/api/volumes/${id}/pause`,{method:'POST'}),
   dictionary: (query: string) => request<DictionaryResult>(`/api/dictionary?q=${encodeURIComponent(query)}`),
   grammar: (sentence: string, focus: string) => request<GrammarAnalysis>(`/api/grammar?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
   explainGrammar: (sentence: string, focus: string, provider?: string, question?: string) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null, question: question || null})}),

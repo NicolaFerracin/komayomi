@@ -2,7 +2,7 @@ export type Volume = {
   id: string
   title: string
   series: string
-  status: 'queued' | 'processing' | 'ready' | 'error'
+  status: 'queued' | 'processing' | 'paused' | 'ready' | 'error'
   page_count: number
   processed_pages: number
   progress: number

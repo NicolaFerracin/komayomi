@@ -1,14 +1,16 @@
-import { BookMarked, BookOpen, Clock3, Pencil, Plus, Sparkles } from 'lucide-react'
+import { BookMarked, BookOpen, Clock3, Pause, Pencil, Plus, RotateCw, Sparkles } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { Brand } from './Brand'
 import type { Volume } from '../types'
 
-export function Library({ volumes, onImport, onOpen, onStudy, onEdit }: {
+export function Library({ volumes, onImport, onOpen, onStudy, onEdit, onRetry, onPause }: {
   volumes: Volume[]
   onImport: () => void
   onOpen: (volume: Volume) => void
   onStudy: () => void
   onEdit: (volume: Volume) => void
+  onRetry: (volume:Volume)=>void
+  onPause: (volume:Volume)=>void
 }) {
   return (
     <main className="library-shell">
@@ -51,8 +53,9 @@ export function Library({ volumes, onImport, onOpen, onStudy, onEdit }: {
                   <div className="volume-status"><Clock3 size={14}/>{volume.page_count} pages <i/> {Math.round(volume.current_page / Math.max(volume.page_count, 1) * 100)}% read</div>
                 ) : (
                   <div className="processing-status">
-                    <div><Sparkles size={14}/> {volume.status === 'error' ? 'Needs attention' : 'Reading the ink'}<span>{Math.round(volume.progress * 100)}%</span></div>
+                    <div><Sparkles size={14}/> {volume.status === 'error' ? 'Needs attention' : volume.status==='paused'?'Processing paused':'Reading the ink'}<span>{Math.round(volume.progress * 100)}%</span></div>
                     <div className="progress-track"><span style={{width: `${volume.progress * 100}%`}}/></div>
+                    <div className="processing-actions">{volume.status==='processing'||volume.status==='queued'?<button onClick={()=>onPause(volume)}><Pause size={12}/> Pause</button>:<button onClick={()=>onRetry(volume)}><RotateCw size={12}/> {volume.status==='error'?'Retry OCR':'Resume'}</button>}</div>
                   </div>
                 )}
               </div>

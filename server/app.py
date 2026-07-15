@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from PIL import Image
 
 from . import db
-from .jobs import output_path, process_volume
+from .jobs import output_path, pause_volume, recover_interrupted, start_volume, stop_all
 from .models import Volume
 from .dictionary import lookup
 from .llm import public_status, structured_text, structured_vision
@@ -32,7 +32,9 @@ UPLOAD_ROOT = db.DATA_DIR / "library"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.initialize()
-    yield
+    recover_interrupted()
+    try: yield
+    finally: await stop_all()
 
 
 app = FastAPI(title="KomaYomi", version="0.1.0", lifespan=lifespan)
@@ -264,7 +266,7 @@ async def import_local(payload: LocalImport):
         raise HTTPException(400, "Path must be an existing directory.")
     volume = create_volume(source, payload.title or source.name, payload.series or source.parent.name)
     if volume.status != "ready" and payload.process:
-        asyncio.create_task(process_volume(volume))
+        start_volume(volume)
     return volume.json()
 
 
@@ -285,17 +287,22 @@ async def upload_volume(
         with (source / name).open("wb") as target:
             shutil.copyfileobj(upload.file, target)
     volume = create_volume(source, title, series)
-    asyncio.create_task(process_volume(volume))
+    start_volume(volume)
     return volume.json()
 
 
 @app.post("/api/volumes/{volume_id}/process")
 async def start_processing(volume_id: str):
     volume = require_volume(volume_id)
-    if volume.status == "processing":
-        return volume.json()
-    asyncio.create_task(process_volume(volume))
+    start_volume(volume)
     return volume.json()
+
+
+@app.post("/api/volumes/{volume_id}/pause")
+async def pause_processing(volume_id: str):
+    require_volume(volume_id)
+    if not await pause_volume(volume_id): raise HTTPException(409, "This volume cannot be paused")
+    return require_volume(volume_id).json()
 
 
 @app.get("/api/volumes/{volume_id}/reader")

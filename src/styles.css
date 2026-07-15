@@ -89,6 +89,7 @@ body::before { content: ""; position: fixed; inset: 0; opacity: .22; pointer-eve
 .processing-status span { margin-left: auto; color: var(--red); }
 .progress-track { height: 3px; margin-top: 10px; background: #d3ccbe; }
 .progress-track span { display: block; height: 100%; background: var(--red); transition: width .6s; }
+.processing-actions { margin-top: 10px; display: flex; justify-content: flex-end; }.processing-actions button { padding: 6px 9px; border: 1px solid var(--line); display: flex; align-items: center; gap: 5px; color: var(--faint); background: transparent; cursor: pointer; font: 8px var(--mono); text-transform: uppercase; }.processing-actions button:hover { border-color: var(--red); color: var(--red); }
 
 .modal-backdrop { position: fixed; z-index: 30; inset: 0; background: rgba(20,19,17,.68); display: grid; place-items: center; padding: 24px; backdrop-filter: blur(8px); }
 .import-card { width: min(610px, 100%); max-height: calc(100vh - 48px); overflow: auto; padding: 46px; background: var(--paper); box-shadow: 20px 24px 0 rgba(0,0,0,.18); position: relative; animation: modal-in .3s both; }
