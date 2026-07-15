@@ -378,9 +378,38 @@ def apply_page_vision(volume_id: str, page_index: int, request: PageOverride):
             "raw_lines": [line.get("text", "") for line in lines],
             "ruby": [[{"base": span.get("base", ""), "reading": span.get("reading", "")} for span in line.get("ruby", [])] for line in lines],
         })
+    blocks = repair_contents_layout(blocks, width, height)
     if not blocks: raise HTTPException(400, "The proposal contains no valid text regions")
     db.save_page_override(volume_id, page_index, blocks, now())
     return {"ok": True, "blocks": blocks}
+
+
+def repair_contents_layout(blocks: list[dict], width: int, height: int) -> list[dict]:
+    """Vision models often transcribe TOCs correctly but invent their boxes.
+
+    A contents page is a regular typographic grid, so use its reading order to
+    anchor columns right-to-left instead of trusting ungrounded coordinates.
+    """
+    if len(blocks) < 9 or not blocks:
+        return blocks
+    first_text = "".join(blocks[0].get("lines", [])).lower()
+    columns = blocks[1:]
+    if "contents" not in first_text or not all(block.get("vertical") for block in columns):
+        return blocks
+    blocks[0]["box"] = [width * .60, height * .385, width * .97, height * .445]
+    right, left = width * .985, width * .015
+    total_columns = sum(max(1, len(block.get("lines", []))) for block in columns)
+    step = (right - left) / max(1, total_columns)
+    top = height * .50
+    cursor = right
+    for block in columns:
+        line_count = max(1, len(block.get("lines", [])))
+        glyphs = max((len(line) for line in block.get("lines", [])), default=5)
+        column_width = step * line_count * .9
+        block["box"] = [max(0, cursor - column_width), top, min(width, cursor), min(height * .94, top + glyphs * height * .043)]
+        block["font_size"] = width * .052
+        cursor -= step * line_count
+    return blocks
 
 
 @app.post("/api/volumes/{volume_id}/pages/{page_index}/analyze")

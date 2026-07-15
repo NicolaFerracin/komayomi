@@ -183,12 +183,9 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           </div>
         )}
         <button className="page-turn page-turn--prev" onClick={() => move(-1)} disabled={pageIndex === 0}><ChevronRight/></button>
-        <div className="page-wrap" title="Double-click artwork to zoom" onDoubleClick={(event) => {
-          if ((event.target as Element).closest('.bubble-overlay')) return
-          event.preventDefault(); zoomAt(zoom > 1.05 ? 1 : 1.75, event.clientX, event.clientY)
-        }} style={{
-          width: `calc((100vh - 150px) * ${page.img_width / page.img_height} * ${zoom})`,
-          height: `calc((100vh - 150px) * ${zoom})`,
+        <div className="page-wrap" style={{
+          width: `calc((100vh - 172px) * ${page.img_width / page.img_height} * ${zoom})`,
+          height: `calc((100vh - 172px) * ${zoom})`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
           {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} onSelection={(text, ruby, x, y) => setSelectionAction({text, ruby, x, y})} onClick={() => { setEditor(index); setLens(false); setLookup(null); setSelectionAction(null) }}/>) }
