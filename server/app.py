@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -577,7 +577,8 @@ async def analyze_page(volume_id: str, page_index: int, request: LensRequest):
 
 
 @app.get("/api/volumes/{volume_id}/pages/{page_index}/ai-history")
-def ai_history(volume_id: str, page_index: int):
+def ai_history(volume_id: str, page_index: int, response: Response):
+    response.headers["Cache-Control"] = "no-store"
     volume = require_volume(volume_id); payload = reader_payload(volume); apply_saved_text(payload, volume_id)
     if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404, "Page not found")
     sentences = ["".join(block.get("lines", [])) for block in payload["pages"][page_index].get("blocks", [])]
