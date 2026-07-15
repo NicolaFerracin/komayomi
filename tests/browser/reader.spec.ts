@@ -12,6 +12,12 @@ test.beforeEach(async ({page}) => {
     if(url.pathname==='/api/volumes') return route.fulfill({json:[{id:'v1',title:'Volume 01',series:'Dragon Ball',status:'ready',page_count:2,processed_pages:2,progress:1,cover_filename:'one.jpg',current_page:0,error:null}]})
     if(url.pathname==='/api/volumes/v1/reader') return route.fulfill({json:{title:'Dragon Ball',volume:'Volume 01',volume_id:'v1',current_page:0,pages}})
     if(url.pathname==='/api/volumes/v1/bookmarks') return route.fulfill({json:[]})
+    if(url.pathname==='/api/saved-items'&&method==='GET') return route.fulfill({json:[
+      {id:'word',text:'悟空',reading:'ごくう',meaning:'Goku',volume_id:'v1',page_index:1,context:null,notes:null,created_at:'2026-01-01',kind:'vocabulary'},
+      {id:'sentence',text:'むかしむかし',reading:null,meaning:'Once upon a time',volume_id:'v1',page_index:0,context:null,notes:null,created_at:'2026-01-02',kind:'sentence'},
+      {id:'grammar',text:'のこと',reading:null,meaning:'the matter of',volume_id:'v1',page_index:0,context:null,notes:null,created_at:'2026-01-03',kind:'grammar'}]})
+    if(url.pathname==='/api/volumes/v1/pages/0/ai-history'&&method==='GET') return route.fulfill({json:[{id:'ai1',kind:'selection',question:'Explain のこと',focus:'のこと',answer:'It frames the matter.',provider:'mock',model:'local-test',created_at:'2026-01-01',details:{breakdown:[{part:'のこと',role:'nominal frame'}]}}]})
+    if(url.pathname==='/api/restore'&&method==='POST') return route.fulfill({json:{ok:true,volumes:1,recovered_jobs:0,safety_backup:'safety.db'}})
     if(url.pathname==='/api/volumes/v1/search') return route.fulfill({json:url.searchParams.get('q')==='ごくう'?[{page:1,block:0,text:'孫悟空',matched_by:'reading'}]:[]})
     if(url.pathname==='/api/llm/status') return route.fulfill({json:{preferred:'mock',providers:[{id:'mock',name:'Mock',model:'local-test',configured:true}]}})
     if(url.pathname==='/api/dictionary') return route.fulfill({json:{query:url.searchParams.get('q'),tokens:[{surface:'むかしむかし',lemma:'むかしむかし',reading:'ムカシムカシ',part_of_speech:'adverb',detail:null,inflection:null}],entries:[{id:1,writings:[],readings:['むかしむかし'],matched_by:'むかしむかし',senses:[{glosses:['once upon a time'],parts_of_speech:['adverb'],misc:[]}]}],kanji:[]}})
@@ -92,4 +98,45 @@ test('unsaved transcription blocks accidental tool switches', async ({page}) => 
   page.once('dialog',(dialog)=>dialog.accept())
   await page.getByRole('button',{name:/Page Lens/}).click()
   await expect(page.getByRole('heading',{name:'Page Lens'})).toBeVisible()
+})
+
+test('adds and removes a page bookmark', async ({page}) => {
+  const add=page.waitForRequest((request)=>request.url().endsWith('/bookmarks/0')&&request.method()==='PUT')
+  await page.getByTitle('Bookmark this page').click();await add
+  await expect(page.getByTitle('Remove page bookmark')).toBeVisible()
+  const remove=page.waitForRequest((request)=>request.url().endsWith('/bookmarks/0')&&request.method()==='DELETE')
+  await page.getByTitle('Remove page bookmark').click();await remove
+})
+
+test('applies and persists reader display settings', async ({page}) => {
+  await page.getByTitle('Reader settings').click()
+  const size=page.getByRole('slider').first()
+  await size.fill('1.5')
+  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('komayomi.readerPreferences')||'{}').overlayScale)).toBe(1.5)
+})
+
+test('filters the study inbox by item type', async ({page}) => {
+  await page.locator('.reader-header__left .icon-button').click()
+  await page.getByRole('button',{name:/Study inbox/}).click()
+  await page.locator('.inbox-kinds').getByRole('button',{name:'grammar'}).click()
+  await expect(page.getByText('のこと')).toBeVisible()
+  await expect(page.getByText('悟空')).toHaveCount(0)
+})
+
+test('deletes saved AI history from Page Lens', async ({page}) => {
+  await page.getByRole('button',{name:/Page Lens/}).click()
+  await expect(page.getByText('Explain のこと')).toBeVisible()
+  page.once('dialog',(dialog)=>dialog.accept())
+  const deleted=page.waitForRequest((request)=>request.url().includes('/ai-history/selection/ai1')&&request.method()==='DELETE')
+  await page.getByTitle('Delete saved query').click();await deleted
+  await expect(page.getByText('Explain のこと')).toHaveCount(0)
+})
+
+test('restores a database backup through the guarded library UI', async ({page}) => {
+  await page.locator('.reader-header__left .icon-button').click()
+  page.once('dialog',(dialog)=>dialog.accept())
+  const restored=page.waitForRequest((request)=>request.url().endsWith('/api/restore')&&request.method()==='POST')
+  await page.locator('.restore-button input').setInputFiles({name:'backup.db',mimeType:'application/vnd.sqlite3',buffer:Buffer.from('sqlite')})
+  await restored
+  await expect(page.getByRole('button',{name:/Study inbox/})).toBeVisible()
 })
