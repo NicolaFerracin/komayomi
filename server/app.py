@@ -55,6 +55,11 @@ class Position(BaseModel):
     page: int
 
 
+class VolumeUpdate(BaseModel):
+    title: str
+    series: str
+
+
 class Correction(BaseModel):
     page_index: int
     block_index: int
@@ -226,6 +231,17 @@ def volumes():
     return [volume.json() for volume in db.get_volumes()]
 
 
+@app.patch("/api/volumes/{volume_id}")
+def update_volume(volume_id: str, payload: VolumeUpdate):
+    volume = require_volume(volume_id)
+    title, series = payload.title.strip(), payload.series.strip()
+    if not title or not series:
+        raise HTTPException(400, "Title and series cannot be empty")
+    volume.title, volume.series = title, series
+    db.save_volume(volume)
+    return volume.json()
+
+
 @app.post("/api/volumes/import-local")
 async def import_local(payload: LocalImport):
     source = Path(payload.path).expanduser().resolve()
@@ -307,6 +323,8 @@ def reader(volume_id: str):
                     block["ruby"][line_index] = correction["ruby"]
     payload["volume_id"] = volume_id
     payload["current_page"] = volume.current_page
+    payload["title"] = volume.series
+    payload["volume"] = volume.title
     return payload
 
 

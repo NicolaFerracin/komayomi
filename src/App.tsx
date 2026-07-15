@@ -4,6 +4,7 @@ import { ImportDialog } from './components/ImportDialog'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
 import { StudyInbox } from './components/StudyInbox'
+import { EditVolumeDialog } from './components/EditVolumeDialog'
 import type { ReaderData, Volume } from './types'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState('')
   const [studying, setStudying] = useState(false)
+  const [editing, setEditing] = useState<Volume | null>(null)
 
   async function refresh() {
     try { setVolumes(await api.volumes()); setError('') }
@@ -34,8 +36,9 @@ export default function App() {
   if (reader) return <Reader data={reader} onExit={() => { setReader(null); refresh() }}/>
   return <>
     {error && <div className="global-error">{error}</div>}
-    <Library volumes={volumes} onImport={() => setImporting(true)} onStudy={() => setStudying(true)} onOpen={open}/>
+    <Library volumes={volumes} onImport={() => setImporting(true)} onStudy={() => setStudying(true)} onEdit={setEditing} onOpen={open}/>
     {importing && <ImportDialog onClose={() => setImporting(false)} onImported={(volume) => { setVolumes((items) => [volume, ...items]); setImporting(false) }}/>} 
     {studying && <StudyInbox onClose={() => setStudying(false)}/>} 
+    {editing && <EditVolumeDialog volume={editing} onClose={()=>setEditing(null)} onSaved={(updated)=>{setVolumes((items)=>items.map((item)=>item.id===updated.id?updated:item));setEditing(null)}}/>}
   </>
 }

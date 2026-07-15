@@ -1,13 +1,14 @@
-import { BookMarked, BookOpen, Clock3, Plus, Sparkles } from 'lucide-react'
+import { BookMarked, BookOpen, Clock3, Pencil, Plus, Sparkles } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { Brand } from './Brand'
 import type { Volume } from '../types'
 
-export function Library({ volumes, onImport, onOpen, onStudy }: {
+export function Library({ volumes, onImport, onOpen, onStudy, onEdit }: {
   volumes: Volume[]
   onImport: () => void
   onOpen: (volume: Volume) => void
   onStudy: () => void
+  onEdit: (volume: Volume) => void
 }) {
   return (
     <main className="library-shell">
@@ -44,7 +45,7 @@ export function Library({ volumes, onImport, onOpen, onStudy }: {
                 {volume.status === 'ready' && <span className="open-cue"><BookOpen size={17}/> Open</span>}
               </button>
               <div className="volume-card__meta">
-                <div className="eyebrow">{volume.series}</div>
+                <div className="volume-card__meta-head"><div className="eyebrow">{volume.series}</div><button title="Edit volume details" onClick={()=>onEdit(volume)}><Pencil size={13}/></button></div>
                 <h3>{volume.title}</h3>
                 {volume.status === 'ready' ? (
                   <div className="volume-status"><Clock3 size={14}/>{volume.page_count} pages <i/> {Math.round(volume.current_page / Math.max(volume.page_count, 1) * 100)}% read</div>
