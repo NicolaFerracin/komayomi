@@ -12,7 +12,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -115,7 +115,8 @@ def initialize() -> None:
             CREATE TABLE IF NOT EXISTS grammar_explanations (
                 id TEXT PRIMARY KEY, sentence TEXT NOT NULL, focus TEXT NOT NULL,
                 question TEXT, provider TEXT NOT NULL, model TEXT NOT NULL,
-                result_json TEXT NOT NULL, created_at TEXT NOT NULL
+                result_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                volume_id TEXT, page_index INTEGER, block_index INTEGER
             );
             CREATE TABLE IF NOT EXISTS page_bookmarks (
                 volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
@@ -141,6 +142,10 @@ def initialize() -> None:
         if "kind" not in columns: db.execute("ALTER TABLE saved_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'vocabulary'")
         db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)")
         db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (3)")
+        grammar_columns = {row[1] for row in db.execute("PRAGMA table_info(grammar_explanations)")}
+        for name, kind in (("volume_id", "TEXT"), ("page_index", "INTEGER"), ("block_index", "INTEGER")):
+            if name not in grammar_columns: db.execute(f"ALTER TABLE grammar_explanations ADD COLUMN {name} {kind}")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (4)")
 
 
 def _volume(row: sqlite3.Row) -> Volume:
@@ -363,8 +368,8 @@ def replace_search_index(volume_id: str, rows: list[tuple[int, int, str, str, st
 
 def save_grammar_explanation(item: dict) -> None:
     with connection() as conn:
-        conn.execute("INSERT INTO grammar_explanations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                     (item["id"], item["sentence"], item["focus"], item.get("question"), item["provider"], item["model"], json.dumps(item["explanation"], ensure_ascii=False), item["created_at"]))
+        conn.execute("INSERT INTO grammar_explanations (id,sentence,focus,question,provider,model,result_json,created_at,volume_id,page_index,block_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     (item["id"], item["sentence"], item["focus"], item.get("question"), item["provider"], item["model"], json.dumps(item["explanation"], ensure_ascii=False), item["created_at"], item.get("volume_id"), item.get("page_index"), item.get("block_index")))
 
 
 def grammar_explanations(sentence: str, focus: str) -> list[dict]:
@@ -381,6 +386,17 @@ def grammar_explanations_for_sentences(sentences: list[str]) -> list[dict]:
     return [{**dict(row), "explanation": json.loads(row["result_json"])} for row in rows]
 
 
+def grammar_explanations_for_page(volume_id: str, page_index: int, sentences: list[str]) -> list[dict]:
+    params: list = [volume_id, page_index]
+    legacy = ""
+    if sentences:
+        legacy = f" OR (volume_id IS NULL AND sentence IN ({','.join('?' for _ in sentences)}))"
+        params.extend(sentences)
+    with connection() as conn:
+        rows = conn.execute(f"SELECT * FROM grammar_explanations WHERE (volume_id=? AND page_index=?){legacy} ORDER BY created_at DESC", params).fetchall()
+    return [{**dict(row), "explanation": json.loads(row["result_json"])} for row in rows]
+
+
 def lens_history(volume_id: str, page_index: int) -> list[dict]:
     with connection() as conn:
         rows = conn.execute("SELECT cache_key, result_json, created_at FROM lens_analyses WHERE volume_id=? AND page_index=? ORDER BY created_at DESC", (volume_id, page_index)).fetchall()
@@ -390,9 +406,9 @@ def lens_history(volume_id: str, page_index: int) -> list[dict]:
 def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str, sentences: list[str]) -> bool:
     with connection() as conn:
         if kind == "selection":
-            if not sentences: return False
             placeholders = ",".join("?" for _ in sentences)
-            cursor = conn.execute(f"DELETE FROM grammar_explanations WHERE id=? AND sentence IN ({placeholders})", [item_id, *sentences])
+            legacy = f" OR (volume_id IS NULL AND sentence IN ({placeholders}))" if sentences else ""
+            cursor = conn.execute(f"DELETE FROM grammar_explanations WHERE id=? AND ((volume_id=? AND page_index=?){legacy})", [item_id, volume_id, page_index, *sentences])
         else:
             cursor = conn.execute("DELETE FROM lens_analyses WHERE volume_id=? AND page_index=? AND cache_key=?", (volume_id, page_index, item_id))
     return cursor.rowcount > 0

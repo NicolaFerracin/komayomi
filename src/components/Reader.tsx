@@ -317,7 +317,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       {lookupHistory&&<LookupHistoryPanel items={recentLookups} onChoose={reopenLookup} onClose={()=>setLookupHistory(false)} onClear={()=>{setRecentLookups([]);localStorage.removeItem(`komayomi.lookups.${data.volume_id}`)}}/>}
       {shortcuts && <ShortcutGuide onClose={()=>setShortcuts(false)}/>}
       {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
-      {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} volumeId={data.volume_id} pageIndex={pageIndex} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
+      {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={lookup.block} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
 
       <footer className="reader-footer"><span><LibraryIcon size={14}/> {data.title}</span><span>← next page · previous page →</span><button onClick={()=>setNavigator(true)}><BookOpen size={14}/> {pageIndex + 1} / {data.pages.length}</button></footer>
     </main>

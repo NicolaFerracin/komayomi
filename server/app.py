@@ -118,6 +118,9 @@ class GrammarExplain(BaseModel):
     focus: str | None = None
     question: str | None = None
     provider: str | None = None
+    volume_id: str | None = None
+    page_index: int | None = None
+    block_index: int | None = None
 
 
 def now() -> str:
@@ -291,7 +294,8 @@ FOCUS: {payload.focus or payload.sentence}"""
     except (ValueError, httpx.HTTPError, json.JSONDecodeError) as error: raise HTTPException(503, str(error))
     saved = {"id": uuid.uuid4().hex, "sentence": payload.sentence, "focus": payload.focus or payload.sentence,
              "question": payload.question, "explanation": result, "provider": provider.id,
-             "model": provider.model, "created_at": now()}
+             "model": provider.model, "created_at": now(), "volume_id": payload.volume_id,
+             "page_index": payload.page_index, "block_index": payload.block_index}
     db.save_grammar_explanation(saved)
     return saved
 
@@ -724,7 +728,7 @@ def ai_history(volume_id: str, page_index: int, response: Response):
     if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404, "Page not found")
     sentences = ["".join(block.get("lines", [])) for block in payload["pages"][page_index].get("blocks", [])]
     items = []
-    for saved in db.grammar_explanations_for_sentences(sentences):
+    for saved in db.grammar_explanations_for_page(volume_id, page_index, sentences):
         explanation = saved["explanation"]
         items.append({"id": saved["id"], "kind": "selection", "question": saved.get("question") or f"Explain {saved['focus']}",
                       "focus": saved["focus"], "answer": explanation.get("interpretation", ""), "provider": saved["provider"],
