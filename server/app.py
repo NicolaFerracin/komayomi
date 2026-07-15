@@ -422,15 +422,24 @@ def hiragana(value: str) -> str:
 def search_volume(volume_id: str, q: str):
     query = hiragana(q.strip())
     if not query or len(query) > 100: return []
-    volume = require_volume(volume_id); payload = reader_payload(volume); apply_saved_text(payload, volume_id)
+    require_volume(volume_id)
+    rows = db.search_index_rows(volume_id)
+    if not rows:
+        volume = require_volume(volume_id); payload = reader_payload(volume); apply_saved_text(payload, volume_id)
+        indexed = []
+        for page_index, page in enumerate(payload.get("pages", [])):
+            for block_index, block in enumerate(page.get("blocks", [])):
+                text = "".join(block.get("lines", []))
+                reading = "".join(token.get("reading") or token.get("surface", "") for token in tokenize(text))
+                indexed.append((page_index, block_index, text, hiragana(text), hiragana(reading)))
+        db.replace_search_index(volume_id, indexed)
+        rows = db.search_index_rows(volume_id)
     hits = []
-    for page_index, page in enumerate(payload.get("pages", [])):
-        for block_index, block in enumerate(page.get("blocks", [])):
-            text = "".join(block.get("lines", []))
-            reading = "".join(token.get("reading") or token.get("surface", "") for token in tokenize(text))
-            if query in hiragana(text) or query in hiragana(reading):
-                hits.append({"page": page_index, "block": block_index, "text": text, "matched_by": "text" if query in hiragana(text) else "reading"})
-                if len(hits) >= 200: return hits
+    for row in rows:
+        matched_by = "text" if query in row["normalized_text"] else "reading" if query in row["normalized_reading"] else None
+        if matched_by:
+            hits.append({"page": row["page_index"], "block": row["block_index"], "text": row["text"], "matched_by": matched_by})
+            if len(hits) >= 200: break
     return hits
 
 

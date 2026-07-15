@@ -12,7 +12,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -127,6 +127,12 @@ def initialize() -> None:
                 reviewed_at TEXT NOT NULL,
                 PRIMARY KEY (volume_id, page_index)
             );
+            CREATE TABLE IF NOT EXISTS search_index (
+                volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
+                block_index INTEGER NOT NULL, text TEXT NOT NULL,
+                normalized_text TEXT NOT NULL, normalized_reading TEXT NOT NULL,
+                PRIMARY KEY (volume_id, page_index, block_index)
+            );
             """
         )
         db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
@@ -134,6 +140,7 @@ def initialize() -> None:
         columns = {row[1] for row in db.execute("PRAGMA table_info(saved_items)")}
         if "kind" not in columns: db.execute("ALTER TABLE saved_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'vocabulary'")
         db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (3)")
 
 
 def _volume(row: sqlite3.Row) -> Volume:
@@ -242,8 +249,9 @@ def save_correction(
                           updated_at=excluded.updated_at
             """,
             (volume_id, page_index, block_index, line_index, raw_text,
-             canonical_text, json.dumps(ruby, ensure_ascii=False), updated_at),
+            canonical_text, json.dumps(ruby, ensure_ascii=False), updated_at),
         )
+        db.execute("DELETE FROM search_index WHERE volume_id=?", (volume_id,))
 
 
 def get_lens_analysis(volume_id: str, page_index: int, cache_key: str) -> dict | None:
@@ -310,6 +318,7 @@ def save_page_override(volume_id: str, page_index: int, blocks: list[dict], upda
     with connection() as conn:
         conn.execute("INSERT OR REPLACE INTO page_overrides VALUES (?, ?, ?, ?)",
                      (volume_id, page_index, json.dumps(blocks, ensure_ascii=False), updated_at))
+        conn.execute("DELETE FROM search_index WHERE volume_id=?", (volume_id,))
 
 
 def block_geometries(volume_id: str) -> dict[tuple[int, int], list[float]]:
@@ -334,6 +343,22 @@ def save_block_text(volume_id: str, page_index: int, block_index: int, lines: li
     with connection() as conn:
         conn.execute("INSERT OR REPLACE INTO block_text_overrides VALUES (?, ?, ?, ?, ?, ?)",
                      (volume_id, page_index, block_index, json.dumps(lines, ensure_ascii=False), json.dumps(ruby, ensure_ascii=False), updated_at))
+        conn.execute("DELETE FROM search_index WHERE volume_id=?", (volume_id,))
+
+
+def search_index_rows(volume_id: str) -> list[dict]:
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM search_index WHERE volume_id=? ORDER BY page_index, block_index", (volume_id,)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def replace_search_index(volume_id: str, rows: list[tuple[int, int, str, str, str]]) -> None:
+    with connection() as conn:
+        conn.execute("DELETE FROM search_index WHERE volume_id=?", (volume_id,))
+        conn.executemany(
+            "INSERT INTO search_index VALUES (?, ?, ?, ?, ?, ?)",
+            [(volume_id, *row) for row in rows],
+        )
 
 
 def save_grammar_explanation(item: dict) -> None:
