@@ -25,6 +25,12 @@ def connection() -> Iterator[sqlite3.Connection]:
         db.close()
 
 
+def create_backup(target: Path) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DB_PATH) as source, sqlite3.connect(target) as destination:
+        source.backup(destination)
+
+
 def initialize() -> None:
     with connection() as db:
         db.executescript(

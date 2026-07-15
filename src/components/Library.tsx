@@ -1,4 +1,4 @@
-import { BookMarked, BookOpen, Clock3, Pause, Pencil, Plus, RotateCw, Sparkles } from 'lucide-react'
+import { BookMarked, BookOpen, Clock3, DatabaseBackup, Pause, Pencil, Plus, RotateCw, Sparkles } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { Brand } from './Brand'
 import type { Volume } from '../types'
@@ -16,7 +16,7 @@ export function Library({ volumes, onImport, onOpen, onStudy, onEdit, onRetry, o
     <main className="library-shell">
       <header className="library-header">
         <Brand/>
-        <div className="library-actions"><button className="secondary-button" onClick={onStudy}><BookMarked size={16}/> Study inbox</button><button className="primary-button primary-button--small" onClick={onImport}><Plus size={17}/> Add volume</button></div>
+        <div className="library-actions"><a className="secondary-button" href="/api/backup" download title="Back up corrections, bookmarks, history, and study data"><DatabaseBackup size={16}/> Backup</a><button className="secondary-button" onClick={onStudy}><BookMarked size={16}/> Study inbox</button><button className="primary-button primary-button--small" onClick={onImport}><Plus size={17}/> Add volume</button></div>
       </header>
 
       <section className="library-hero">

@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import shutil
+import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from typing import Annotated
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from PIL import Image
@@ -201,6 +203,15 @@ def apply_saved_text(payload: dict, volume_id: str) -> None:
 @app.get("/api/health")
 def health():
     return {"status": "ok", "mokuro": True}
+
+
+@app.get("/api/backup")
+def backup():
+    handle = tempfile.NamedTemporaryFile(prefix="komayomi-backup-", suffix=".db", delete=False)
+    path = Path(handle.name); handle.close(); db.create_backup(path)
+    filename = f"komayomi-backup-{datetime.now().strftime('%Y-%m-%d-%H%M')}.db"
+    return FileResponse(path, filename=filename, media_type="application/vnd.sqlite3",
+                        background=BackgroundTask(path.unlink, missing_ok=True))
 
 
 @app.get("/api/llm/status")
