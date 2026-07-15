@@ -431,6 +431,7 @@ async def reprocess_page(volume_id: str, page_index: int, request: VisionRequest
     prompt = """Detect and transcribe every Japanese text region on this entire manga page. This may be dialogue, narration, a table of contents, signage, or sound effects. Do not assume all text is vertical. Group text into coherent regions in natural Japanese reading order. Box coordinates must be [x1,y1,x2,y2] normalized from 0 to 1000. Preserve kanji in text and record visible furigana separately with printed=true. Never invent a kanji merely from a phonetic reading. Summary should describe the page layout and uncertainties."""
     try: result, provider = await structured_vision(request.provider, prompt, image_bytes, mime, PAGE_VISION_SCHEMA)
     except (ValueError, httpx.HTTPError, json.JSONDecodeError) as error: raise HTTPException(503, str(error))
+    result["blocks"] = normalize_contents_proposal(result.get("blocks", []))
     return {"proposal": result, "provider": provider.id, "model": provider.model, "applied": False}
 
 
@@ -440,7 +441,8 @@ def apply_page_vision(volume_id: str, page_index: int, request: PageOverride):
     if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404, "Page not found")
     width, height = payload["pages"][page_index]["img_width"], payload["pages"][page_index]["img_height"]
     blocks = []
-    for proposed in request.blocks:
+    proposed_blocks = normalize_contents_proposal(request.blocks)
+    for proposed in proposed_blocks:
         box = proposed.get("box", [])
         if len(box) != 4: continue
         coords = [max(0, min(1000, float(value))) for value in box]
@@ -466,7 +468,8 @@ def repair_contents_layout(blocks: list[dict], width: int, height: int) -> list[
     """
     if len(blocks) < 9 or not blocks:
         return blocks
-    first_text = "".join(blocks[0].get("lines", [])).lower()
+    def line_text(line): return line if isinstance(line, str) else line.get("text", "")
+    first_text = "".join(line_text(line) for line in blocks[0].get("lines", [])).lower()
     columns = blocks[1:]
     if "contents" not in first_text or not all(block.get("vertical") for block in columns):
         return blocks
@@ -478,12 +481,43 @@ def repair_contents_layout(blocks: list[dict], width: int, height: int) -> list[
     cursor = right
     for block in columns:
         line_count = max(1, len(block.get("lines", [])))
-        glyphs = max((len(line) for line in block.get("lines", [])), default=5)
+        glyphs = max((len(line_text(line)) for line in block.get("lines", [])), default=5)
         column_width = step * line_count * .9
         block["box"] = [max(0, cursor - column_width), top, min(width, cursor), min(height * .94, top + glyphs * height * .043)]
         block["font_size"] = width * .052
         cursor -= step * line_count
     return blocks
+
+
+def normalize_contents_proposal(blocks: list[dict]) -> list[dict]:
+    """Split LLM proposals that collapse an entire TOC into one region.
+
+    Models alternate between one block per chapter and one block containing
+    every chapter as separate lines. Normalize both shapes before preview so
+    the review accurately represents what will be applied.
+    """
+    if len(blocks) < 2:
+        return blocks
+    title_index = next((index for index, block in enumerate(blocks)
+                        if "contents" in "".join(line.get("text", "") for line in block.get("lines", [])).lower()), None)
+    if title_index is None:
+        return blocks
+    title = blocks[title_index]
+    chapters: list[dict] = []
+    for index, block in enumerate(blocks):
+        if index == title_index:
+            continue
+        lines = block.get("lines", [])
+        if len(lines) == 1 and "/" in lines[0].get("text", ""):
+            parts = [part.strip() for part in lines[0]["text"].split("/") if part.strip()]
+            lines = [{"text": part, "ruby": []} for part in parts]
+        if len(lines) >= 5:
+            chapters.extend({**block, "vertical": True, "lines": [line]} for line in lines)
+        else:
+            chapters.append({**block, "vertical": True})
+    if len(chapters) < 8:
+        return blocks
+    return repair_contents_layout([title, *chapters], 1000, 1000)
 
 
 @app.post("/api/volumes/{volume_id}/pages/{page_index}/analyze")
