@@ -405,6 +405,7 @@ def reader(volume_id: str):
     overrides = db.page_overrides(volume_id)
     geometries = db.block_geometries(volume_id)
     text_overrides = db.block_text_overrides(volume_id)
+    reviewed = db.reviewed_pages(volume_id)
     for page_index, page in enumerate(payload["pages"]):
         if page_index in overrides:
             page["blocks"] = overrides[page_index]
