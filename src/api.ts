@@ -69,4 +69,5 @@ export const api = {
     request<SavedItem>('/api/saved-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) }),
   savedItems: () => request<SavedItem[]>('/api/saved-items'),
   deleteSavedItem: (id: string) => request<{ok: boolean}>(`/api/saved-items/${id}`, { method: 'DELETE' }),
+  updateSavedItem: (id:string, item:{reading:string|null;meaning:string|null;notes:string|null}) => request<SavedItem>(`/api/saved-items/${id}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)}),
 }

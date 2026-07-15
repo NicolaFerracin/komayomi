@@ -89,6 +89,12 @@ class SavedItem(BaseModel):
     notes: str | None = None
 
 
+class SavedItemUpdate(BaseModel):
+    reading: str | None = None
+    meaning: str | None = None
+    notes: str | None = None
+
+
 class PageOverride(BaseModel):
     blocks: list[dict]
 
@@ -642,6 +648,13 @@ def create_saved_item(payload: SavedItem):
 def delete_saved_item(item_id: str):
     if not db.delete_saved_item(item_id): raise HTTPException(404, "Saved item not found")
     return {"ok": True}
+
+
+@app.patch("/api/saved-items/{item_id}")
+def update_saved_item(item_id: str, payload: SavedItemUpdate):
+    item = db.update_saved_item(item_id, payload.model_dump())
+    if not item: raise HTTPException(404, "Saved item not found")
+    return item
 
 
 @app.get("/api/saved-items/export.tsv", response_class=PlainTextResponse)

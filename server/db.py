@@ -222,6 +222,14 @@ def delete_saved_item(item_id: str) -> bool:
     return cursor.rowcount > 0
 
 
+def update_saved_item(item_id: str, updates: dict) -> dict | None:
+    with connection() as conn:
+        cursor = conn.execute("UPDATE saved_items SET reading=?, meaning=?, notes=? WHERE id=?",
+                              (updates.get("reading"), updates.get("meaning"), updates.get("notes"), item_id))
+        row = conn.execute("SELECT * FROM saved_items WHERE id=?", (item_id,)).fetchone()
+    return dict(row) if cursor.rowcount and row else None
+
+
 def page_overrides(volume_id: str) -> dict[int, list[dict]]:
     with connection() as conn:
         rows = conn.execute("SELECT page_index, blocks_json FROM page_overrides WHERE volume_id=?", (volume_id,)).fetchall()

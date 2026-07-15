@@ -5,7 +5,7 @@ import type { DictionaryResult, GrammarAnalysis, GrammarExplanation, LlmStatus, 
 import { preferredProvider } from '../preferences'
 import { AiProviderStatus } from './AiProviderStatus'
 
-export function LookupPanel({ query, sentence = query, rubySpans = [], onClose, onAskAI }: { query: string; sentence?: string; rubySpans?: RubySpan[]; onClose: () => void; onAskAI:(sentence:string,focus:string)=>void }) {
+export function LookupPanel({ query, sentence = query, rubySpans = [], volumeId, pageIndex, onClose, onAskAI }: { query: string; sentence?: string; rubySpans?: RubySpan[]; volumeId:string; pageIndex:number; onClose: () => void; onAskAI:(sentence:string,focus:string)=>void }) {
   const [result, setResult] = useState<DictionaryResult | null>(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -37,7 +37,7 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], onClose, 
           {!result.entries.length && <div className="no-entry">No exact word entry. Individual kanji are shown below.</div>}
         </div>
         {!!result.kanji.length && <section className="kanji-section"><div className="section-rule"><span>KANJI / {result.kanji.length}</span></div>{result.kanji.map((kanji) => <article className="kanji-card" key={kanji.literal}><div className="kanji-card__literal">{kanji.literal}</div><div><strong>{kanji.meanings.slice(0, 5).join(', ')}</strong><dl><dt>ON</dt><dd>{kanji.readings.on.join('、') || '—'}</dd><dt>KUN</dt><dd>{kanji.readings.kun.join('、') || '—'}</dd></dl><div className="kanji-stats"><span>{kanji.strokes} strokes</span>{kanji.grade && <span>grade {kanji.grade}</span>}{kanji.jlpt && <span>JLPT {kanji.jlpt}</span>}</div></div></article>)}</section>}
-        <button className="save-word-button" onClick={async () => { const entry = result.entries[0]; const printed = printedReadings(result, rubySpans); await api.saveItem({ text: query, reading: printed.filter(Boolean).join('') || result.tokens.map((token) => token.reading || '').join(''), meaning: entry?.senses[0]?.glosses.join('; ') || '', context: sentence }); setSaved(true) }} disabled={saved}><BookMarked size={16}/> {saved ? 'Saved to study inbox' : 'Save for later'} <span>{saved ? 'exact printed form saved' : 'no review debt'}</span></button>
+        <button className="save-word-button" onClick={async () => { const entry = result.entries[0]; const printed = printedReadings(result, rubySpans); await api.saveItem({ text: query, reading: printed.filter(Boolean).join('') || result.tokens.map((token) => token.reading || '').join(''), meaning: entry?.senses[0]?.glosses.join('; ') || '', context: sentence, volume_id:volumeId, page_index:pageIndex }); setSaved(true) }} disabled={saved}><BookMarked size={16}/> {saved ? 'Saved to study inbox' : 'Save for later'} <span>{saved ? 'exact printed form saved' : 'no review debt'}</span></button>
       </>}
     </aside>
   )
