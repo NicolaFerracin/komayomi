@@ -210,6 +210,13 @@ def save_item(item: dict) -> None:
         )
 
 
+def matching_saved_item(text: str, volume_id: str | None, page_index: int | None, context: str | None) -> dict | None:
+    with connection() as conn:
+        row = conn.execute("SELECT * FROM saved_items WHERE text=? AND volume_id IS ? AND page_index IS ? AND context IS ? ORDER BY created_at DESC LIMIT 1",
+                           (text, volume_id, page_index, context)).fetchone()
+    return dict(row) if row else None
+
+
 def saved_items() -> list[dict]:
     with connection() as conn:
         rows = conn.execute("SELECT * FROM saved_items ORDER BY created_at DESC").fetchall()

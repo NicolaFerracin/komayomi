@@ -639,6 +639,8 @@ def list_saved_items():
 
 @app.post("/api/saved-items")
 def create_saved_item(payload: SavedItem):
+    existing = db.matching_saved_item(payload.text, payload.volume_id, payload.page_index, payload.context)
+    if existing: return existing
     item = {**payload.model_dump(), "id": uuid.uuid4().hex, "created_at": now()}
     db.save_item(item)
     return item
