@@ -73,6 +73,14 @@ test('selection lookup replaces Page Lens', async ({page}) => {
   await expect(page.getByRole('heading',{name:'Page Lens'})).toHaveCount(0)
 })
 
+test('saves the full sentence as a typed study item', async ({page}) => {
+  await selectFirstBubble(page);await page.getByRole('button',{name:/Look up/}).click()
+  const request=page.waitForRequest((request)=>request.url().endsWith('/api/saved-items')&&request.method()==='POST')
+  await page.getByRole('button',{name:/Save the whole sentence/}).click()
+  expect((await request).postDataJSON()).toMatchObject({text:'むかしむかし',kind:'sentence',volume_id:'v1',page_index:0})
+  await expect(page.getByRole('button',{name:/Sentence saved/})).toBeDisabled()
+})
+
 test('unsaved transcription blocks accidental tool switches', async ({page}) => {
   await page.locator('.bubble-edit-trigger').first().evaluate((button)=>(button as HTMLButtonElement).click())
   await expect(page.getByRole('heading',{name:/Bubble 1/})).toBeVisible()

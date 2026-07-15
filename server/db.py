@@ -12,7 +12,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -92,7 +92,8 @@ def initialize() -> None:
             CREATE TABLE IF NOT EXISTS saved_items (
                 id TEXT PRIMARY KEY, volume_id TEXT, page_index INTEGER,
                 text TEXT NOT NULL, reading TEXT, meaning TEXT,
-                context TEXT, notes TEXT, created_at TEXT NOT NULL
+                context TEXT, notes TEXT, created_at TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'vocabulary'
             );
             CREATE TABLE IF NOT EXISTS page_overrides (
                 volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
@@ -129,7 +130,10 @@ def initialize() -> None:
             """
         )
         db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)", (SCHEMA_VERSION,))
+        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (1)")
+        columns = {row[1] for row in db.execute("PRAGMA table_info(saved_items)")}
+        if "kind" not in columns: db.execute("ALTER TABLE saved_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'vocabulary'")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)")
 
 
 def _volume(row: sqlite3.Row) -> Volume:
@@ -257,17 +261,17 @@ def save_lens_analysis(volume_id: str, page_index: int, cache_key: str, result: 
 def save_item(item: dict) -> None:
     with connection() as conn:
         conn.execute(
-            "INSERT INTO saved_items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO saved_items (id,volume_id,page_index,text,reading,meaning,context,notes,created_at,kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (item["id"], item.get("volume_id"), item.get("page_index"), item["text"],
              item.get("reading"), item.get("meaning"), item.get("context"),
-             item.get("notes"), item["created_at"]),
+             item.get("notes"), item["created_at"], item.get("kind", "vocabulary")),
         )
 
 
-def matching_saved_item(text: str, volume_id: str | None, page_index: int | None, context: str | None) -> dict | None:
+def matching_saved_item(text: str, volume_id: str | None, page_index: int | None, context: str | None, kind: str) -> dict | None:
     with connection() as conn:
-        row = conn.execute("SELECT * FROM saved_items WHERE text=? AND volume_id IS ? AND page_index IS ? AND context IS ? ORDER BY created_at DESC LIMIT 1",
-                           (text, volume_id, page_index, context)).fetchone()
+        row = conn.execute("SELECT * FROM saved_items WHERE text=? AND volume_id IS ? AND page_index IS ? AND context IS ? AND kind=? ORDER BY created_at DESC LIMIT 1",
+                           (text, volume_id, page_index, context, kind)).fetchone()
     return dict(row) if row else None
 
 

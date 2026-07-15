@@ -91,6 +91,7 @@ class SavedItem(BaseModel):
     page_index: int | None = None
     context: str | None = None
     notes: str | None = None
+    kind: str = "vocabulary"
 
 
 class SavedItemUpdate(BaseModel):
@@ -719,7 +720,8 @@ def list_saved_items():
 
 @app.post("/api/saved-items")
 def create_saved_item(payload: SavedItem):
-    existing = db.matching_saved_item(payload.text, payload.volume_id, payload.page_index, payload.context)
+    if payload.kind not in {"vocabulary", "sentence", "grammar"}: raise HTTPException(400, "Unknown study item type")
+    existing = db.matching_saved_item(payload.text, payload.volume_id, payload.page_index, payload.context, payload.kind)
     if existing: return existing
     item = {**payload.model_dump(), "id": uuid.uuid4().hex, "created_at": now()}
     db.save_item(item)
@@ -742,6 +744,6 @@ def update_saved_item(item_id: str, payload: SavedItemUpdate):
 @app.get("/api/saved-items/export.tsv", response_class=PlainTextResponse)
 def export_saved_items():
     def clean(value): return str(value or "").replace("\t", " ").replace("\n", " ")
-    rows = ["Expression\tReading\tMeaning\tContext\tNotes"]
-    rows += ["\t".join(clean(item.get(key)) for key in ("text", "reading", "meaning", "context", "notes")) for item in db.saved_items()]
+    rows = ["Expression\tReading\tMeaning\tContext\tNotes\tType"]
+    rows += ["\t".join(clean(item.get(key)) for key in ("text", "reading", "meaning", "context", "notes", "kind")) for item in db.saved_items()]
     return PlainTextResponse("\n".join(rows), headers={"Content-Disposition": "attachment; filename=komayomi-items.tsv"})

@@ -79,6 +79,7 @@ export type PageVisionProposal = { proposal: { summary: string; blocks: Array<{ 
 export type SavedItem = {
   id: string; text: string; reading: string | null; meaning: string | null
   volume_id: string | null; page_index: number | null; context: string | null; notes: string | null; created_at: string
+  kind: 'vocabulary'|'sentence'|'grammar'
 }
 
 export type GrammarAnalysis = { sentence: string; focus: string | null; needs_context: boolean; matches: Array<{span: string; form: string; title: string; explanation: string; translation_hint: string; confidence: number; source: string}> }

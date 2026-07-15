@@ -26,10 +26,10 @@ class DatabaseSafetyTests(unittest.TestCase):
 
     def test_restore_replaces_atomically_and_keeps_safety_copy(self):
         with db.connection() as connection:
-            connection.execute("INSERT INTO saved_items VALUES ('before',NULL,NULL,'before',NULL,NULL,NULL,NULL,'now')")
+            connection.execute("INSERT INTO saved_items (id,text,created_at) VALUES ('before','before','now')")
         backup = self.data / 'chosen.db'; db.create_backup(backup)
         with db.connection() as connection:
-            connection.execute("INSERT INTO saved_items VALUES ('after',NULL,NULL,'after',NULL,NULL,NULL,NULL,'now')")
+            connection.execute("INSERT INTO saved_items (id,text,created_at) VALUES ('after','after','now')")
         safety = self.data / 'safety.db'; db.restore_backup(backup, safety)
         with db.connection() as connection:
             ids = [row[0] for row in connection.execute('SELECT id FROM saved_items')]
