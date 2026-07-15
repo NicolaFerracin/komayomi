@@ -36,6 +36,7 @@ export function PageLens({ volumeId, page, pageData, initialQuestion='', onClose
     await api.applyVisionPage(volumeId, page, pageVision.proposal.blocks); onPageApplied(); onClose()
   }
   async function removeHistory(item: AiHistoryItem) {
+    if(!window.confirm('Delete this saved AI query? This cannot be undone.'))return
     await api.deleteAiHistory(volumeId,page,item.kind,item.id)
     setHistory((items)=>items.filter((saved)=>saved.id!==item.id));if(openHistory===item.id)setOpenHistory(null)
   }

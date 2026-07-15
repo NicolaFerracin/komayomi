@@ -113,6 +113,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [layoutMode, setLayoutMode] = useState(false)
   const [panning, setPanning] = useState(false)
   const [editor, setEditor] = useState<number | null>(null)
+  const [editorDirty,setEditorDirty]=useState(false)
   const [lens, setLens] = useState(false)
   const [lensSeed, setLensSeed] = useState('')
   const [settings, setSettings] = useState(false)
@@ -132,20 +133,29 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   useEffect(()=>{for(const index of [pageIndex-1,pageIndex+1]){const source=data.pages[index]?.image_url;if(source){const image=new Image();image.src=source}}},[data.pages,pageIndex])
 
   function move(delta: number) {
+    if(!closeEditor())return
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
-    setPageIndex(next); setEditor(null); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
   function goToPage(next: number) {
-    setPageIndex(next); setEditor(null); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
+    if(!closeEditor())return
+    setPageIndex(next); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
   function openLookup() {
     if (!selectionAction) return
+    if(!closeEditor())return
     setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block})
-    setEditor(null); setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
+    setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
+  }
+
+  function closeEditor() {
+    if(editor===null)return true
+    if(editorDirty&&!window.confirm('Discard your unsaved transcription changes?'))return false
+    setEditorDirty(false);setEditor(null);return true
   }
 
   function toggleBookmark() {
@@ -161,10 +171,10 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       if (event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key === 'ArrowLeft') move(1)
       if (event.key === 'ArrowRight') move(-1)
-      if (event.key === 'Escape') { setEditor(null); setLens(false); setNavigator(false); setSettings(false); setLookup(null); setShortcuts(false) }
+      if (event.key === 'Escape') { if(!closeEditor())return;setLens(false); setNavigator(false); setSettings(false); setLookup(null); setShortcuts(false) }
       if (event.key === '?' ) setShortcuts((value)=>!value)
-      if (event.key.toLowerCase() === 'g') { setNavigator(true); setLens(false); setEditor(null); setSettings(false); setLookup(null) }
-      if (event.key.toLowerCase() === 'l') { setLens(true); setLensSeed(''); setNavigator(false); setEditor(null); setSettings(false) }
+      if (event.key.toLowerCase() === 'g') { if(!closeEditor())return;setNavigator(true); setLens(false); setSettings(false); setLookup(null) }
+      if (event.key.toLowerCase() === 'l') { if(!closeEditor())return;setLens(true); setLensSeed(''); setNavigator(false); setSettings(false) }
       if (event.key.toLowerCase() === 'b') toggleBookmark()
       if (event.key.toLowerCase() === 'o') setShowOverlays((value)=>!value)
       if (event.key === '+' || event.key === '=') zoomAt(zoom + .1)
@@ -238,17 +248,17 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   return (
     <main className="reader-shell" style={{'--tool-panel-width':`${display.panelWidth}px`} as CSSProperties}>
       <header className="reader-header">
-        <div className="reader-header__left"><button className="icon-button dark" onClick={onExit}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><strong>{data.volume}</strong></div></div>
-        <button className="reader-progress" title="Browse pages" onClick={()=>{setNavigator(true);setLens(false);setEditor(null);setLookup(null);setSettings(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
+        <div className="reader-header__left"><button className="icon-button dark" onClick={()=>{if(closeEditor())onExit()}}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><strong>{data.volume}</strong></div></div>
+        <button className="reader-progress" title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(true);setLens(false);setLookup(null);setSettings(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
         <div className="reader-tools">
           <button className={showOverlays ? 'active' : ''} onClick={() => setShowOverlays(!showOverlays)} title="Toggle text overlays"><Highlighter size={18}/></button>
-          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { setLayoutMode(!layoutMode); setShowOverlays(true); setEditor(null); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
+          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { if(!closeEditor())return;setLayoutMode(!layoutMode); setShowOverlays(true); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
           <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
-          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { setLens(!lens); setLensSeed(''); setEditor(null); setNavigator(false); setSettings(false) }}><Eye size={18}/><span>Page Lens</span></button>
-          <button className={navigator?'active':''} title="Browse pages" onClick={()=>{setNavigator(!navigator);setLens(false);setEditor(null);setLookup(null);setSettings(false)}}><Grid3X3 size={18}/></button>
+          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { if(!closeEditor())return;setLens(!lens); setLensSeed(''); setNavigator(false); setSettings(false) }}><Eye size={18}/><span>Page Lens</span></button>
+          <button className={navigator?'active':''} title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(!navigator);setLens(false);setLookup(null);setSettings(false)}}><Grid3X3 size={18}/></button>
           <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
-          <button className={settings?'active':''} title="Reader settings" onClick={()=>{setSettings(!settings);setLens(false);setNavigator(false);setEditor(null);setLookup(null)}}><Settings2 size={18}/></button>
+          <button className={settings?'active':''} title="Reader settings" onClick={()=>{if(!closeEditor())return;setSettings(!settings);setLens(false);setNavigator(false);setLookup(null)}}><Settings2 size={18}/></button>
           <button title="Keyboard shortcuts (?)" onClick={()=>setShortcuts(true)}><CircleHelp size={18}/></button>
         </div>
       </header>
@@ -259,7 +269,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <div className="ocr-warning">
             <span>OCR uncertain</span>
             <p>This page has overlapping or unusually large text regions.</p>
-            <button onClick={() => { setLens(true); setEditor(null) }}>Page-level vision will help</button>
+            <button onClick={() => { if(!closeEditor())return;setLens(true) }}>Page-level vision will help</button>
           </div>
         )}
         <button className="page-turn page-turn--prev" onClick={() => move(-1)} disabled={pageIndex === 0}><ChevronRight/></button>
@@ -268,12 +278,12 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           height: `calc((100vh - 172px) * ${zoom})`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
 
-      {selectedBlock && <BubbleEditor volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={editor!} block={selectedBlock} onClose={() => setEditor(null)} onSaved={saveBlock}/>} 
+      {selectedBlock && <BubbleEditor volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={editor!} block={selectedBlock} onClose={closeEditor} onSaved={saveBlock} onDirtyChange={setEditorDirty}/>}
       {lens && <PageLens
         volumeId={data.volume_id}
         page={pageIndex}

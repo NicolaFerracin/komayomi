@@ -10,7 +10,7 @@ export function StudyInbox({ onClose, onOpenSource }: { onClose: () => void; onO
   const [editing,setEditing]=useState<string|null>(null)
   const [draft,setDraft]=useState({reading:'',meaning:'',notes:''})
   useEffect(() => { api.savedItems().then(setItems).catch((reason) => setError(reason.message)) }, [])
-  async function remove(id: string) { await api.deleteSavedItem(id); setItems((current) => current.filter((item) => item.id !== id)) }
+  async function remove(id: string) { if(!window.confirm('Delete this saved study item?'))return;await api.deleteSavedItem(id); setItems((current) => current.filter((item) => item.id !== id)) }
   const visible=useMemo(()=>{const needle=query.trim().toLocaleLowerCase();return needle?items.filter((item)=>[item.text,item.reading,item.meaning,item.context,item.notes].some((value)=>value?.toLocaleLowerCase().includes(needle))):items},[items,query])
   function edit(item:SavedItem){setEditing(item.id);setDraft({reading:item.reading||'',meaning:item.meaning||'',notes:item.notes||''})}
   async function save(id:string){const item=await api.updateSavedItem(id,{reading:draft.reading||null,meaning:draft.meaning||null,notes:draft.notes||null});setItems((current)=>current.map((saved)=>saved.id===id?item:saved));setEditing(null)}

@@ -6,13 +6,14 @@ import type { LlmStatus, RubySpan, TextBlock, VisionProposal } from '../types'
 import { preferredProvider } from '../preferences'
 import { AiProviderStatus } from './AiProviderStatus'
 
-export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, onSaved }: {
+export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, onSaved, onDirtyChange }: {
   volumeId: string
   pageIndex: number
   blockIndex: number
   block: TextBlock
   onClose: () => void
   onSaved: (lines: string[], ruby: RubySpan[][]) => void
+  onDirtyChange:(dirty:boolean)=>void
 }) {
   const [lines, setLines] = useState([...block.lines])
   const [ruby, setRuby] = useState<RubySpan[][]>(block.ruby.map((line) => [...line]))
@@ -28,11 +29,13 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
     setLines([...block.lines])
     setRuby(block.ruby.map((line) => [...line]))
     setMarkups(block.lines.map((line, index) => toMarkup(line, block.ruby[index] || [])))
+    onDirtyChange(false)
   }, [block])
 
   useEffect(() => { api.llmStatus().then((value) => { setStatus(value); setProvider(preferredProvider(value)) }).catch(() => undefined) }, [])
 
   function updateRuby(line: number, raw: string) {
+    onDirtyChange(true)
     setMarkups((current) => current.map((item, index) => index === line ? raw : item))
     const spans = Array.from(raw.matchAll(/\{([^{}|]+)\|([^{}]+)\}/g)).map((match) => ({
       base: match[1].trim(), reading: match[2].trim(), printed: true,
@@ -42,7 +45,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
 
   async function save() {
     await api.blockText(volumeId, pageIndex, blockIndex, lines, ruby)
-    setSaved(true); onSaved(lines, ruby)
+    setSaved(true); onSaved(lines, ruby);onDirtyChange(false)
     window.setTimeout(() => setSaved(false), 1400)
   }
 
@@ -59,7 +62,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
     const nextLines = proposed.map((line) => line.text)
     const nextRuby = proposed.map((line) => line.ruby.map(({base, reading, printed}) => ({base, reading, printed})))
     setLines(nextLines); setRuby(nextRuby); setMarkups(nextLines.map((line, index) => toMarkup(line, nextRuby[index])))
-    setProposal(null)
+    setProposal(null);onDirtyChange(true)
   }
 
   return (
@@ -70,7 +73,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
         {lines.map((line, index) => (
           <div className="editor-line" key={index}>
             <div className="editor-line__number">{String(index + 1).padStart(2, '0')}</div>
-            <label><span>Canonical Japanese</span><textarea value={line} onChange={(e) => setLines((current) => current.map((item, i) => i === index ? e.target.value : item))}/></label>
+            <label><span>Canonical Japanese</span><textarea value={line} onChange={(e) => {onDirtyChange(true);setLines((current) => current.map((item, i) => i === index ? e.target.value : item))}}/></label>
             <div className="raw-ocr"><span>RAW OCR</span>{block.raw_lines[index] ?? 'New line from vision'}</div>
             <label className="ruby-field"><span>Furigana markup <i>{'{kanji|reading}'} inside the full sentence</i></span><input value={markups[index]} onChange={(e) => updateRuby(index, e.target.value)} placeholder="{食|た}べる"/></label>
             <div className="ruby-preview"><span>PREVIEW</span><p>{renderRuby(lines[index], ruby[index])}</p></div>
@@ -85,7 +88,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
       <AiProviderStatus status={status} provider={provider}/>
       {visionError && <div className="error-note">{visionError}</div>}
       {proposal && <section className="vision-proposal"><span className="eyebrow">VISION PROPOSAL · NOT SAVED</span><p>{proposal.proposal.summary}</p>{proposal.proposal.lines.map((line, index) => <div key={index}><small>{Math.round(line.confidence * 100)}% confidence</small><strong>{renderRuby(line.text, line.ruby)}</strong></div>)}<button className="primary-button" onClick={acceptProposal}><Check size={16}/> Use this proposal in editor</button><button className="text-button" onClick={() => setProposal(null)}>Discard</button></section>}
-        <button className="text-button" onClick={() => { setLines([...block.raw_lines]); setRuby(block.raw_lines.map(() => [])); setMarkups([...block.raw_lines]) }}><RotateCcw size={14}/> Restore raw OCR</button>
+        <button className="text-button" onClick={() => { onDirtyChange(true);setLines([...block.raw_lines]); setRuby(block.raw_lines.map(() => [])); setMarkups([...block.raw_lines]) }}><RotateCcw size={14}/> Restore raw OCR</button>
     </aside>
   )
 }
