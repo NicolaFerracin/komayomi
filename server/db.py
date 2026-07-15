@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,6 +12,8 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
+SCHEMA_VERSION = 1
+REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
 @contextmanager
@@ -29,6 +32,27 @@ def create_backup(target: Path) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as source, sqlite3.connect(target) as destination:
         source.backup(destination)
+
+
+def validate_backup(path: Path) -> None:
+    try:
+        with sqlite3.connect(path) as candidate:
+            if candidate.execute("PRAGMA integrity_check").fetchone()[0] != "ok": raise ValueError("SQLite integrity check failed")
+            tables = {row[0] for row in candidate.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    except sqlite3.DatabaseError as error:
+        raise ValueError("This is not a valid SQLite backup") from error
+    missing = REQUIRED_TABLES - tables
+    if missing: raise ValueError(f"Backup is missing required tables: {', '.join(sorted(missing))}")
+
+
+def restore_backup(source: Path, safety_backup: Path) -> None:
+    validate_backup(source)
+    create_backup(safety_backup)
+    staging = DATA_DIR / ".restore-staging.db"
+    try:
+        shutil.copy2(source, staging); validate_backup(staging); staging.replace(DB_PATH); initialize()
+    finally:
+        staging.unlink(missing_ok=True)
 
 
 def initialize() -> None:
@@ -104,6 +128,8 @@ def initialize() -> None:
             );
             """
         )
+        db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)", (SCHEMA_VERSION,))
 
 
 def _volume(row: sqlite3.Row) -> Volume:

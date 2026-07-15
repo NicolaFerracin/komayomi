@@ -1,0 +1,46 @@
+import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from server import db
+
+
+class DatabaseSafetyTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.data = Path(self.temp.name)
+        self.path = self.data / 'komayomi.db'
+        self.patch_data = patch.object(db, 'DATA_DIR', self.data)
+        self.patch_path = patch.object(db, 'DB_PATH', self.path)
+        self.patch_data.start(); self.patch_path.start(); db.initialize()
+
+    def tearDown(self):
+        self.patch_path.stop(); self.patch_data.stop(); self.temp.cleanup()
+
+    def test_schema_version_is_recorded(self):
+        with sqlite3.connect(self.path) as connection:
+            version = connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0]
+        self.assertEqual(version, db.SCHEMA_VERSION)
+
+    def test_restore_replaces_atomically_and_keeps_safety_copy(self):
+        with db.connection() as connection:
+            connection.execute("INSERT INTO saved_items VALUES ('before',NULL,NULL,'before',NULL,NULL,NULL,NULL,'now')")
+        backup = self.data / 'chosen.db'; db.create_backup(backup)
+        with db.connection() as connection:
+            connection.execute("INSERT INTO saved_items VALUES ('after',NULL,NULL,'after',NULL,NULL,NULL,NULL,'now')")
+        safety = self.data / 'safety.db'; db.restore_backup(backup, safety)
+        with db.connection() as connection:
+            ids = [row[0] for row in connection.execute('SELECT id FROM saved_items')]
+        self.assertEqual(ids, ['before'])
+        db.validate_backup(safety)
+
+    def test_invalid_file_is_rejected_without_touching_database(self):
+        invalid = self.data / 'invalid.db'; invalid.write_text('not sqlite')
+        with self.assertRaises(ValueError): db.restore_backup(invalid, self.data / 'unused.db')
+        with sqlite3.connect(self.path) as connection:
+            self.assertEqual(connection.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+
+
+if __name__ == '__main__': unittest.main()

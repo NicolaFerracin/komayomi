@@ -14,6 +14,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [studying, setStudying] = useState(false)
   const [editing, setEditing] = useState<Volume | null>(null)
+  const [restoring,setRestoring]=useState(false)
 
   async function refresh() {
     try { setVolumes(await api.volumes()); setError('') }
@@ -41,11 +42,12 @@ export default function App() {
     try { const updated=action==='start'?await api.processVolume(volume.id):await api.pauseVolume(volume.id);setVolumes((items)=>items.map((item)=>item.id===updated.id?updated:item));if(action==='start')window.setTimeout(refresh,500) }
     catch(reason){setError(reason instanceof Error?reason.message:'Could not change processing state')}
   }
+  async function restoreBackup(file:File){if(!window.confirm('Restore this backup? KomaYomi will create a safety copy of the current database first.'))return;setRestoring(true);try{const result=await api.restoreBackup(file);await refresh();window.alert(`Backup restored. A safety copy was kept as ${result.safety_backup}.`)}catch(reason){setError(reason instanceof Error?reason.message:'Could not restore backup')}finally{setRestoring(false)}}
 
   if (reader) return <Reader data={reader} onExit={() => { setReader(null); refresh() }}/>
   return <>
     {error && <div className="global-error">{error}</div>}
-    <Library volumes={volumes} onImport={() => setImporting(true)} onStudy={() => setStudying(true)} onEdit={setEditing} onOpen={open} onRetry={(volume)=>changeProcessing(volume,'start')} onPause={(volume)=>changeProcessing(volume,'pause')}/>
+    <Library volumes={volumes} restoring={restoring} onRestore={restoreBackup} onImport={() => setImporting(true)} onStudy={() => setStudying(true)} onEdit={setEditing} onOpen={open} onRetry={(volume)=>changeProcessing(volume,'start')} onPause={(volume)=>changeProcessing(volume,'pause')}/>
     {importing && <ImportDialog onClose={() => setImporting(false)} onImported={(volume) => { setVolumes((items) => [volume, ...items]); setImporting(false) }}/>} 
     {studying && <StudyInbox onClose={() => setStudying(false)} onOpenSource={openSaved}/>}
     {editing && <EditVolumeDialog volume={editing} onClose={()=>setEditing(null)} onSaved={(updated)=>{setVolumes((items)=>items.map((item)=>item.id===updated.id?updated:item));setEditing(null)}}/>}

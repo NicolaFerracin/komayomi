@@ -14,6 +14,7 @@ export const api = {
   updateVolume: (id: string, title: string, series: string) => request<Volume>(`/api/volumes/${id}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,series})}),
   processVolume: (id:string)=>request<Volume>(`/api/volumes/${id}/process`,{method:'POST'}),
   pauseVolume: (id:string)=>request<Volume>(`/api/volumes/${id}/pause`,{method:'POST'}),
+  restoreBackup: (file:File)=>{const form=new FormData();form.append('file',file);return request<{ok:boolean;volumes:number;recovered_jobs:number;safety_backup:string}>('/api/restore',{method:'POST',body:form})},
   dictionary: (query: string) => request<DictionaryResult>(`/api/dictionary?q=${encodeURIComponent(query)}`),
   grammar: (sentence: string, focus: string) => request<GrammarAnalysis>(`/api/grammar?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
   explainGrammar: (sentence: string, focus: string, provider?: string, question?: string) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null, question: question || null})}),

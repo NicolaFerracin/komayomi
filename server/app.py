@@ -214,6 +214,33 @@ def backup():
                         background=BackgroundTask(path.unlink, missing_ok=True))
 
 
+@app.post("/api/restore")
+async def restore_backup(file: UploadFile = File(...)):
+    if not (file.filename or "").lower().endswith(".db"): raise HTTPException(400, "Choose a KomaYomi .db backup")
+    db.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    backups = db.DATA_DIR / "backups"; backups.mkdir(exist_ok=True)
+    safety = backups / f"pre-restore-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.db"
+    handle = tempfile.NamedTemporaryFile(dir=db.DATA_DIR, prefix="restore-upload-", suffix=".db", delete=False)
+    upload_path = Path(handle.name)
+    try:
+        size = 0
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > 512 * 1024 * 1024: raise HTTPException(413, "Backup is unexpectedly large")
+            handle.write(chunk)
+        handle.close()
+        await stop_all()
+        try: db.restore_backup(upload_path, safety)
+        except ValueError as error:
+            recover_interrupted(); raise HTTPException(400, str(error))
+        except Exception:
+            recover_interrupted(); raise
+        recovered = recover_interrupted()
+        return {"ok": True, "volumes": len(db.get_volumes()), "recovered_jobs": recovered, "safety_backup": safety.name}
+    finally:
+        handle.close(); upload_path.unlink(missing_ok=True)
+
+
 @app.get("/api/llm/status")
 def llm_status():
     return public_status()
