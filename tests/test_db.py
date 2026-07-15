@@ -42,5 +42,11 @@ class DatabaseSafetyTests(unittest.TestCase):
         with sqlite3.connect(self.path) as connection:
             self.assertEqual(connection.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
 
+    def test_volume_source_lookup_prevents_duplicate_local_imports(self):
+        with db.connection() as connection:
+            connection.execute("INSERT INTO volumes VALUES ('v1','Volume','Series','/manga/volume','ready',1,1,NULL,0,NULL,'now')")
+        self.assertEqual(db.get_volume_by_source('/manga/volume').id, 'v1')
+        self.assertIsNone(db.get_volume_by_source('/manga/other'))
+
 
 if __name__ == '__main__': unittest.main()

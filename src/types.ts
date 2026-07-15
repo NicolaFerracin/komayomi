@@ -9,6 +9,7 @@ export type Volume = {
   cover_filename: string | null
   current_page: number
   error: string | null
+  reused?: boolean
 }
 
 export type RubySpan = { base: string; reading: string; printed?: boolean }

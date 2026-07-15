@@ -15,6 +15,7 @@ export default function App() {
   const [studying, setStudying] = useState(false)
   const [editing, setEditing] = useState<Volume | null>(null)
   const [restoring,setRestoring]=useState(false)
+  const [notice,setNotice]=useState('')
 
   async function refresh() {
     try { setVolumes(await api.volumes()); setError('') }
@@ -47,9 +48,13 @@ export default function App() {
   if (reader) return <Reader data={reader} onExit={() => { setReader(null); refresh() }}/>
   return <>
     {error && <div className="global-error">{error}</div>}
+    {notice&&<div className="global-notice">{notice}</div>}
     <Library volumes={volumes} restoring={restoring} onRestore={restoreBackup} onImport={() => setImporting(true)} onStudy={() => setStudying(true)} onEdit={setEditing} onOpen={open} onRetry={(volume)=>changeProcessing(volume,'start')} onPause={(volume)=>changeProcessing(volume,'pause')}/>
-    {importing && <ImportDialog onClose={() => setImporting(false)} onImported={(volume) => { setVolumes((items) => [volume, ...items]); setImporting(false) }}/>} 
-    {studying && <StudyInbox onClose={() => setStudying(false)} onOpenSource={openSaved}/>}
+    {importing && <ImportDialog onClose={() => setImporting(false)} onImported={(volume) => {
+      setVolumes((items) => [volume, ...items.filter((item)=>item.id!==volume.id)])
+      setNotice(volume.reused?'That folder is already in your library. KomaYomi reused its existing volume.':'Volume added to your library.')
+      window.setTimeout(()=>setNotice(''),3500); setImporting(false)
+    }}/>} {studying && <StudyInbox onClose={() => setStudying(false)} onOpenSource={openSaved}/>}
     {editing && <EditVolumeDialog volume={editing} onClose={()=>setEditing(null)} onSaved={(updated)=>{setVolumes((items)=>items.map((item)=>item.id===updated.id?updated:item));setEditing(null)}}/>}
   </>
 }

@@ -148,6 +148,12 @@ def get_volume(volume_id: str) -> Volume | None:
     return _volume(row) if row else None
 
 
+def get_volume_by_source(source_path: str) -> Volume | None:
+    with connection() as db:
+        row = db.execute("SELECT * FROM volumes WHERE source_path=? ORDER BY created_at LIMIT 1", (source_path,)).fetchone()
+    return _volume(row) if row else None
+
+
 def save_volume(volume: Volume) -> None:
     fields = tuple(volume.__dataclass_fields__)
     placeholders = ",".join("?" for _ in fields)

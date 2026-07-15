@@ -303,6 +303,10 @@ async def import_local(payload: LocalImport):
     source = Path(payload.path).expanduser().resolve()
     if not source.is_dir():
         raise HTTPException(400, "Path must be an existing directory.")
+    existing = db.get_volume_by_source(str(source))
+    if existing:
+        if existing.status != "ready" and payload.process: start_volume(existing)
+        return {**existing.json(), "reused": True}
     volume = create_volume(source, payload.title or source.name, payload.series or source.parent.name)
     if volume.status != "ready" and payload.process:
         start_volume(volume)
