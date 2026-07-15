@@ -1,4 +1,4 @@
-import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume } from './types'
+import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume, VolumeSearchHit } from './types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options)
@@ -21,6 +21,7 @@ export const api = {
   grammarExplanationHistory: (sentence: string, focus: string) => request<GrammarExplanation[]>(`/api/grammar/explanations?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
   llmStatus: () => request<LlmStatus>('/api/llm/status'),
   reader: (id: string) => request<ReaderData>(`/api/volumes/${id}/reader`),
+  searchVolume:(id:string,query:string)=>request<VolumeSearchHit[]>(`/api/volumes/${id}/search?q=${encodeURIComponent(query)}`),
   importLocal: (path: string, title?: string, series?: string) =>
     request<Volume>('/api/volumes/import-local', {
       method: 'POST',

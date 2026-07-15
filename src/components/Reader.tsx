@@ -124,6 +124,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [lookupHistory,setLookupHistory]=useState(false)
   const [recentLookups,setRecentLookups]=useState<RecentLookup[]>(()=>{try{return JSON.parse(localStorage.getItem(`komayomi.lookups.${initialData.volume_id}`)||'[]')}catch{return[]}})
   const [fullscreen,setFullscreen]=useState(Boolean(document.fullscreenElement))
+  const [searchMatch,setSearchMatch]=useState<{page:number;block:number}|null>(null)
   const [display,setDisplay]=useState<ReaderPreferences>(readerPreferences)
   const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
@@ -140,13 +141,13 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   function move(delta: number) {
     if(!closeEditor())return
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
-    setPageIndex(next); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next);setSearchMatch(null); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
-  function goToPage(next: number) {
+  function goToPage(next: number,block?:number) {
     if(!closeEditor())return
-    setPageIndex(next); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next);setSearchMatch(block===undefined?null:{page:next,block}); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
@@ -295,7 +296,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           height: `calc((100vh - 172px) * ${zoom})`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} active={layoutMode || selectionAction?.block === index || lookup?.block === index || (searchMatch?.page===pageIndex&&searchMatch.block===index)} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
@@ -310,7 +311,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
-      {navigator && <PageNavigator pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
+      {navigator && <PageNavigator volumeId={data.volume_id} pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
       {lookupHistory&&<LookupHistoryPanel items={recentLookups} onChoose={reopenLookup} onClose={()=>setLookupHistory(false)} onClear={()=>{setRecentLookups([]);localStorage.removeItem(`komayomi.lookups.${data.volume_id}`)}}/>}
       {shortcuts && <ShortcutGuide onClose={()=>setShortcuts(false)}/>}
       {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}

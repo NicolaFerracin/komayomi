@@ -23,7 +23,7 @@ from PIL import Image
 from . import db
 from .jobs import output_path, pause_volume, recover_interrupted, start_volume, stop_all
 from .models import Volume
-from .dictionary import lookup
+from .dictionary import lookup, tokenize
 from .llm import public_status, structured_text, structured_vision
 from .grammar import analyze as analyze_grammar
 
@@ -392,6 +392,26 @@ def reader(volume_id: str):
     payload["title"] = volume.series
     payload["volume"] = volume.title
     return payload
+
+
+def hiragana(value: str) -> str:
+    return "".join(chr(ord(char) - 0x60) if "ァ" <= char <= "ヶ" else char for char in value).lower()
+
+
+@app.get("/api/volumes/{volume_id}/search")
+def search_volume(volume_id: str, q: str):
+    query = hiragana(q.strip())
+    if not query or len(query) > 100: return []
+    volume = require_volume(volume_id); payload = reader_payload(volume); apply_saved_text(payload, volume_id)
+    hits = []
+    for page_index, page in enumerate(payload.get("pages", [])):
+        for block_index, block in enumerate(page.get("blocks", [])):
+            text = "".join(block.get("lines", []))
+            reading = "".join(token.get("reading") or token.get("surface", "") for token in tokenize(text))
+            if query in hiragana(text) or query in hiragana(reading):
+                hits.append({"page": page_index, "block": block_index, "text": text, "matched_by": "text" if query in hiragana(text) else "reading"})
+                if len(hits) >= 200: return hits
+    return hits
 
 
 @app.get("/api/volumes/{volume_id}/images/{filename}")

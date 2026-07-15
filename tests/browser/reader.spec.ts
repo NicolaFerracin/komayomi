@@ -12,6 +12,7 @@ test.beforeEach(async ({page}) => {
     if(url.pathname==='/api/volumes') return route.fulfill({json:[{id:'v1',title:'Volume 01',series:'Dragon Ball',status:'ready',page_count:2,processed_pages:2,progress:1,cover_filename:'one.jpg',current_page:0,error:null}]})
     if(url.pathname==='/api/volumes/v1/reader') return route.fulfill({json:{title:'Dragon Ball',volume:'Volume 01',volume_id:'v1',current_page:0,pages}})
     if(url.pathname==='/api/volumes/v1/bookmarks') return route.fulfill({json:[]})
+    if(url.pathname==='/api/volumes/v1/search') return route.fulfill({json:url.searchParams.get('q')==='ごくう'?[{page:1,block:0,text:'孫悟空',matched_by:'reading'}]:[]})
     if(url.pathname==='/api/llm/status') return route.fulfill({json:{preferred:'mock',providers:[{id:'mock',name:'Mock',model:'local-test',configured:true}]}})
     if(url.pathname==='/api/dictionary') return route.fulfill({json:{query:url.searchParams.get('q'),tokens:[{surface:'むかしむかし',lemma:'むかしむかし',reading:'ムカシムカシ',part_of_speech:'adverb',detail:null,inflection:null}],entries:[{id:1,writings:[],readings:['むかしむかし'],matched_by:'むかしむかし',senses:[{glosses:['once upon a time'],parts_of_speech:['adverb'],misc:[]}]}],kanji:[]}})
     if(url.pathname==='/api/grammar') return route.fulfill({json:{sentence:url.searchParams.get('sentence'),focus:url.searchParams.get('focus'),needs_context:false,matches:[]}})
@@ -31,6 +32,14 @@ test('browses and searches the volume transcript', async ({page}) => {
   await expect(page.getByRole('button',{name:'Open page 2'})).toBeVisible()
   await page.getByRole('button',{name:'Open page 2'}).click()
   await expect(page.getByAltText('Page 2')).toBeVisible()
+})
+
+test('finds kana readings and pins the matching bubble', async ({page}) => {
+  await page.getByTitle('Browse pages').first().click()
+  await page.getByPlaceholder('Search Japanese transcript…').fill('ごくう')
+  await expect(page.getByText('reading match')).toBeVisible()
+  await page.getByRole('button',{name:'Open page 2'}).click()
+  await expect(page.locator('.bubble-overlay.is-pinned')).toContainText('孫悟空')
 })
 
 test('reader tools replace each other instead of stacking', async ({page}) => {
