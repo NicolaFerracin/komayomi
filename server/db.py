@@ -55,6 +55,34 @@ def restore_backup(source: Path, safety_backup: Path) -> None:
         staging.unlink(missing_ok=True)
 
 
+def _column(db: sqlite3.Connection, table: str, name: str, declaration: str) -> None:
+    if name not in {row[1] for row in db.execute(f"PRAGMA table_info({table})")}:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
+
+
+def _migration_2(db: sqlite3.Connection) -> None: _column(db, "saved_items", "kind", "TEXT NOT NULL DEFAULT 'vocabulary'")
+def _migration_3(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS search_index (volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,block_index INTEGER NOT NULL,text TEXT NOT NULL,normalized_text TEXT NOT NULL,normalized_reading TEXT NOT NULL,PRIMARY KEY(volume_id,page_index,block_index))")
+def _migration_4(db: sqlite3.Connection) -> None:
+    for name, kind in (("volume_id", "TEXT"), ("page_index", "INTEGER"), ("block_index", "INTEGER")): _column(db, "grammar_explanations", name, kind)
+def _migration_5(db: sqlite3.Connection) -> None:
+    _column(db, "volumes", "content_fingerprint", "TEXT")
+    db.execute("CREATE INDEX IF NOT EXISTS volume_content_fingerprint ON volumes(content_fingerprint)")
+def _migration_6(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS processing_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,volume_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+MIGRATIONS = {2:_migration_2, 3:_migration_3, 4:_migration_4, 5:_migration_5, 6:_migration_6}
+
+
+def _migrate(db: sqlite3.Connection) -> None:
+    db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+    db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (1)")
+    applied = {row[0] for row in db.execute("SELECT version FROM schema_migrations")}
+    for version in range(2, SCHEMA_VERSION + 1):
+        if version not in applied:
+            MIGRATIONS[version](db)
+            db.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
+
+
 def initialize() -> None:
     with connection() as db:
         db.executescript(
@@ -141,21 +169,7 @@ def initialize() -> None:
             );
             """
         )
-        db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (1)")
-        columns = {row[1] for row in db.execute("PRAGMA table_info(saved_items)")}
-        if "kind" not in columns: db.execute("ALTER TABLE saved_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'vocabulary'")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (3)")
-        grammar_columns = {row[1] for row in db.execute("PRAGMA table_info(grammar_explanations)")}
-        for name, kind in (("volume_id", "TEXT"), ("page_index", "INTEGER"), ("block_index", "INTEGER")):
-            if name not in grammar_columns: db.execute(f"ALTER TABLE grammar_explanations ADD COLUMN {name} {kind}")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (4)")
-        volume_columns = {row[1] for row in db.execute("PRAGMA table_info(volumes)")}
-        if "content_fingerprint" not in volume_columns: db.execute("ALTER TABLE volumes ADD COLUMN content_fingerprint TEXT")
-        db.execute("CREATE INDEX IF NOT EXISTS volume_content_fingerprint ON volumes(content_fingerprint)")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (5)")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (6)")
+        _migrate(db)
 
 
 def _volume(row: sqlite3.Row) -> Volume:

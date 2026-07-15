@@ -13,6 +13,7 @@ import { PageNavigator } from './PageNavigator'
 import { ShortcutGuide } from './ShortcutGuide'
 import { readerPreferences, type ReaderPreferences } from '../preferences'
 import { LookupHistoryPanel, type RecentLookup } from './LookupHistoryPanel'
+import { useRecentLookups } from '../hooks/useRecentLookups'
 
 function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   if (!spans.length) return <>{text}</>
@@ -122,7 +123,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [bookmarks, setBookmarks] = useState<Set<number>>(new Set())
   const [shortcuts, setShortcuts] = useState(false)
   const [lookupHistory,setLookupHistory]=useState(false)
-  const [recentLookups,setRecentLookups]=useState<RecentLookup[]>(()=>{try{return JSON.parse(localStorage.getItem(`komayomi.lookups.${initialData.volume_id}`)||'[]')}catch{return[]}})
+  const recentLookups=useRecentLookups(initialData.volume_id)
   const [fullscreen,setFullscreen]=useState(Boolean(document.fullscreenElement))
   const [searchMatch,setSearchMatch]=useState<{page:number;block:number}|null>(null)
   const [display,setDisplay]=useState<ReaderPreferences>(readerPreferences)
@@ -155,7 +156,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     if (!selectionAction) return
     if(!closeEditor())return
     setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block})
-    const recent={text:selectionAction.text,context:selectionAction.context,page:pageIndex,createdAt:new Date().toISOString()};setRecentLookups((items)=>{const next=[recent,...items.filter((item)=>!(item.text===recent.text&&item.context===recent.context&&item.page===recent.page))].slice(0,30);localStorage.setItem(`komayomi.lookups.${data.volume_id}`,JSON.stringify(next));return next})
+    recentLookups.add({text:selectionAction.text,context:selectionAction.context,page:pageIndex,createdAt:new Date().toISOString()})
     setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
   }
 
@@ -314,7 +315,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {navigator && <PageNavigator volumeId={data.volume_id} pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
-      {lookupHistory&&<LookupHistoryPanel items={recentLookups} onChoose={reopenLookup} onClose={()=>setLookupHistory(false)} onClear={()=>{setRecentLookups([]);localStorage.removeItem(`komayomi.lookups.${data.volume_id}`)}}/>}
+      {lookupHistory&&<LookupHistoryPanel items={recentLookups.items} onChoose={reopenLookup} onClose={()=>setLookupHistory(false)} onClear={recentLookups.clear}/>}
       {shortcuts && <ShortcutGuide onClose={()=>setShortcuts(false)}/>}
       {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
       {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={lookup.block} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
