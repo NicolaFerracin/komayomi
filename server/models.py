@@ -17,6 +17,7 @@ class Volume:
     current_page: int
     error: str | None
     created_at: str
+    content_fingerprint: str | None = None
 
     def json(self) -> dict[str, Any]:
         result = asdict(self)

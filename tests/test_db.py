@@ -44,9 +44,15 @@ class DatabaseSafetyTests(unittest.TestCase):
 
     def test_volume_source_lookup_prevents_duplicate_local_imports(self):
         with db.connection() as connection:
-            connection.execute("INSERT INTO volumes VALUES ('v1','Volume','Series','/manga/volume','ready',1,1,NULL,0,NULL,'now')")
+            connection.execute("INSERT INTO volumes (id,title,series,source_path,status,page_count,processed_pages,cover_filename,current_page,error,created_at) VALUES ('v1','Volume','Series','/manga/volume','ready',1,1,NULL,0,NULL,'now')")
         self.assertEqual(db.get_volume_by_source('/manga/volume').id, 'v1')
         self.assertIsNone(db.get_volume_by_source('/manga/other'))
+
+    def test_volume_content_fingerprint_finds_duplicate_uploads(self):
+        with db.connection() as connection:
+            connection.execute("INSERT INTO volumes (id,title,series,source_path,status,page_count,processed_pages,current_page,created_at,content_fingerprint) VALUES ('v2','Volume','Series','/upload','ready',1,1,0,'now','same-pages')")
+        self.assertEqual(db.get_volume_by_fingerprint('same-pages').id, 'v2')
+        self.assertIsNone(db.get_volume_by_fingerprint('different-pages'))
 
 
 if __name__ == '__main__': unittest.main()

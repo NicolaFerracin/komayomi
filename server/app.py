@@ -138,7 +138,16 @@ def image_files(source: Path) -> list[Path]:
     return sorted(path for path in source.iterdir() if path.suffix.lower() in IMAGE_SUFFIXES)
 
 
-def create_volume(source: Path, title: str, series: str) -> Volume:
+def image_set_fingerprint(pages: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for page in pages:
+        digest.update(page.name.encode("utf-8")); digest.update(b"\0")
+        with page.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""): digest.update(chunk)
+    return digest.hexdigest()
+
+
+def create_volume(source: Path, title: str, series: str, fingerprint: str | None = None) -> Volume:
     pages = image_files(source)
     if not pages:
         raise HTTPException(400, "The selected directory contains no supported page images.")
@@ -157,6 +166,7 @@ def create_volume(source: Path, title: str, series: str) -> Volume:
         current_page=0,
         error=None,
         created_at=now(),
+        content_fingerprint=fingerprint or image_set_fingerprint(pages),
     )
     db.save_volume(volume)
     return volume
@@ -352,7 +362,17 @@ async def upload_volume(
             continue
         with (source / name).open("wb") as target:
             shutil.copyfileobj(upload.file, target)
-    volume = create_volume(source, title, series)
+    pages = image_files(source)
+    if not pages:
+        shutil.rmtree(source.parent, ignore_errors=True)
+        raise HTTPException(400, "The upload contains no supported page images.")
+    fingerprint = image_set_fingerprint(pages)
+    existing = db.get_volume_by_fingerprint(fingerprint)
+    if existing:
+        shutil.rmtree(source.parent, ignore_errors=True)
+        if existing.status != "ready": start_volume(existing)
+        return {**existing.json(), "reused": True}
+    volume = create_volume(source, title, series, fingerprint)
     start_volume(volume)
     return volume.json()
 

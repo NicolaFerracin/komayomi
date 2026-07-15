@@ -12,7 +12,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -70,7 +70,8 @@ def initialize() -> None:
                 cover_filename TEXT,
                 current_page INTEGER NOT NULL DEFAULT 0,
                 error TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                content_fingerprint TEXT
             );
             CREATE TABLE IF NOT EXISTS corrections (
                 volume_id TEXT NOT NULL,
@@ -146,6 +147,10 @@ def initialize() -> None:
         for name, kind in (("volume_id", "TEXT"), ("page_index", "INTEGER"), ("block_index", "INTEGER")):
             if name not in grammar_columns: db.execute(f"ALTER TABLE grammar_explanations ADD COLUMN {name} {kind}")
         db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (4)")
+        volume_columns = {row[1] for row in db.execute("PRAGMA table_info(volumes)")}
+        if "content_fingerprint" not in volume_columns: db.execute("ALTER TABLE volumes ADD COLUMN content_fingerprint TEXT")
+        db.execute("CREATE INDEX IF NOT EXISTS volume_content_fingerprint ON volumes(content_fingerprint)")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (5)")
 
 
 def _volume(row: sqlite3.Row) -> Volume:
@@ -167,6 +172,12 @@ def get_volume(volume_id: str) -> Volume | None:
 def get_volume_by_source(source_path: str) -> Volume | None:
     with connection() as db:
         row = db.execute("SELECT * FROM volumes WHERE source_path=? ORDER BY created_at LIMIT 1", (source_path,)).fetchone()
+    return _volume(row) if row else None
+
+
+def get_volume_by_fingerprint(fingerprint: str) -> Volume | None:
+    with connection() as db:
+        row = db.execute("SELECT * FROM volumes WHERE content_fingerprint=? ORDER BY created_at LIMIT 1", (fingerprint,)).fetchone()
     return _volume(row) if row else None
 
 
