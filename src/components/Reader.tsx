@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -9,6 +9,7 @@ import { BubbleEditor } from './BubbleEditor'
 import { PageLens } from './PageLens'
 import { LookupPanel } from './LookupPanel'
 import { SettingsPanel } from './SettingsPanel'
+import { PageNavigator } from './PageNavigator'
 
 function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   if (!spans.length) return <>{text}</>
@@ -113,6 +114,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [lens, setLens] = useState(false)
   const [lensSeed, setLensSeed] = useState('')
   const [settings, setSettings] = useState(false)
+  const [navigator, setNavigator] = useState(false)
   const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
   const [layoutHistory, setLayoutHistory] = useState<Array<{page:number;block:number;box:[number,number,number,number]}>>([])
@@ -122,7 +124,12 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
 
   function move(delta: number) {
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
-    setPageIndex(next); setEditor(null); setLens(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next); setEditor(null); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
+    api.position(data.volume_id, next).catch(() => undefined)
+  }
+
+  function goToPage(next: number) {
+    setPageIndex(next); setEditor(null); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
@@ -131,7 +138,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
       if (event.key === 'ArrowLeft') move(1)
       if (event.key === 'ArrowRight') move(-1)
-      if (event.key === 'Escape' && (editor !== null || lens)) { setEditor(null); setLens(false) }
+      if (event.key === 'Escape' && (editor !== null || lens || navigator)) { setEditor(null); setLens(false); setNavigator(false) }
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
@@ -204,15 +211,16 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         <div className="reader-progress"><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></div>
         <div className="reader-tools">
           <button className={showOverlays ? 'active' : ''} onClick={() => setShowOverlays(!showOverlays)} title="Toggle text overlays"><Highlighter size={18}/></button>
-          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { setLayoutMode(!layoutMode); setShowOverlays(true); setEditor(null); setLens(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
+          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { setLayoutMode(!layoutMode); setShowOverlays(true); setEditor(null); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
           <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
-          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { setLens(!lens); setLensSeed(''); setEditor(null) }}><Eye size={18}/><span>Page Lens</span></button>
-          <button className={settings?'active':''} title="Reader settings" onClick={()=>{setSettings(!settings);setLens(false);setEditor(null);setLookup(null)}}><Settings2 size={18}/></button>
+          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { setLens(!lens); setLensSeed(''); setEditor(null); setNavigator(false); setSettings(false) }}><Eye size={18}/><span>Page Lens</span></button>
+          <button className={navigator?'active':''} title="Browse pages" onClick={()=>{setNavigator(!navigator);setLens(false);setEditor(null);setLookup(null);setSettings(false)}}><Grid3X3 size={18}/></button>
+          <button className={settings?'active':''} title="Reader settings" onClick={()=>{setSettings(!settings);setLens(false);setNavigator(false);setEditor(null);setLookup(null)}}><Settings2 size={18}/></button>
         </div>
       </header>
 
-      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || lookup || settings) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
+      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || lookup || settings || navigator) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
         {layoutMode && <div className="layout-mode-banner"><Move size={15}/><div><strong>Layout edit</strong><span>Drag a region to move it · pull its corner to resize · changes save on release</span></div><button onClick={undoLayout} disabled={!layoutHistory.length}><Undo2 size={13}/> Undo</button><button onClick={() => setLayoutMode(false)}>Done</button></div>}
         {page.ocr_quality?.suspicious && (
           <div className="ocr-warning">
@@ -227,7 +235,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           height: `calc((100vh - 172px) * ${zoom})`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
@@ -242,6 +250,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
+      {navigator && <PageNavigator pages={data.pages} current={pageIndex} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
       {selectionAction && !editor && !lens && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={() => { setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block}); setSelectionAction(null) }}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
       {lookup && editor === null && !lens && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
 
