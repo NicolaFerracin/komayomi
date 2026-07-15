@@ -586,12 +586,12 @@ def ai_history(volume_id: str, page_index: int):
         explanation = saved["explanation"]
         items.append({"id": saved["id"], "kind": "selection", "question": saved.get("question") or f"Explain {saved['focus']}",
                       "focus": saved["focus"], "answer": explanation.get("interpretation", ""), "provider": saved["provider"],
-                      "model": saved["model"], "created_at": saved["created_at"]})
+                      "model": saved["model"], "created_at": saved["created_at"], "details": explanation})
     for saved in db.lens_history(volume_id, page_index):
         analysis = saved.get("analysis", {})
         items.append({"id": saved["id"], "kind": "page", "question": saved.get("question") or "Analyze this page",
                       "focus": None, "answer": analysis.get("summary", ""), "provider": saved.get("provider", ""),
-                      "model": saved.get("model", ""), "created_at": saved["created_at"]})
+                      "model": saved.get("model", ""), "created_at": saved["created_at"], "details": analysis})
     return sorted(items, key=lambda item: item["created_at"], reverse=True)
 
 

@@ -81,4 +81,4 @@ export type SavedItem = {
 
 export type GrammarAnalysis = { sentence: string; focus: string | null; needs_context: boolean; matches: Array<{span: string; form: string; title: string; explanation: string; translation_hint: string; confidence: number; source: string}> }
 export type GrammarExplanation = { id: string; sentence: string; focus: string; question: string | null; created_at: string; explanation: {interpretation: string; breakdown: Array<{part: string; role: string}>; uncertainty: string}; provider: string; model: string }
-export type AiHistoryItem = {id:string;kind:'selection'|'page';question:string;focus:string|null;answer:string;provider:string;model:string;created_at:string}
+export type AiHistoryItem = {id:string;kind:'selection'|'page';question:string;focus:string|null;answer:string;provider:string;model:string;created_at:string;details?:{interpretation?:string;breakdown?:Array<{part:string;role:string}>;uncertainty?:string;summary?:string;notes?:Array<{type:string;title:string;explanation:string;evidence:string;confidence:number}>}}
