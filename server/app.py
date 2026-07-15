@@ -201,6 +201,24 @@ def apply_saved_text(payload: dict, volume_id: str) -> None:
                     block.setdefault("ruby", [[] for _ in block["lines"]])[line_index] = correction["ruby"]
 
 
+def normalize_block(block: dict, width: int, height: int) -> dict:
+    lines = [str(line) for line in (block.get("lines") or [])]
+    raw = [str(line) for line in (block.get("raw_lines") or lines)]
+    if len(raw) < len(lines): raw.extend(lines[len(raw):])
+    ruby_source = block.get("ruby") if isinstance(block.get("ruby"), list) else []
+    ruby = []
+    for index in range(len(lines)):
+        spans = ruby_source[index] if index < len(ruby_source) and isinstance(ruby_source[index], list) else []
+        ruby.append([{"base": str(span.get("base", "")), "reading": str(span.get("reading", "")), "printed": bool(span.get("printed"))} for span in spans if isinstance(span, dict) and span.get("base")])
+    box = block.get("box") if isinstance(block.get("box"), list) and len(block.get("box")) == 4 else [0, 0, width, height]
+    try: box = [float(box[0]), float(box[1]), float(box[2]), float(box[3])]
+    except (TypeError, ValueError): box = [0, 0, width, height]
+    x1,x2=sorted((max(0,min(width,box[0])),max(0,min(width,box[2]))));y1,y2=sorted((max(0,min(height,box[1])),max(0,min(height,box[3]))))
+    try: font_size=max(6.0,min(float(block.get("font_size",20)),max(width,height)))
+    except (TypeError,ValueError): font_size=20.0
+    return {**block,"box":[x1,y1,x2,y2],"vertical":bool(block.get("vertical")),"font_size":font_size,"lines":lines,"raw_lines":raw[:len(lines)],"ruby":ruby,"lines_coords":block.get("lines_coords") if isinstance(block.get("lines_coords"),list) else []}
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "mokuro": True}
@@ -362,6 +380,7 @@ def reader(volume_id: str):
             page["blocks"] = overrides[page_index]
             page["vision_override"] = True
         page["image_url"] = f"/api/volumes/{volume_id}/images/{Path(page['img_path']).name}"
+        page["blocks"] = [normalize_block(block,page["img_width"],page["img_height"]) for block in page.get("blocks",[]) if isinstance(block,dict)]
         page_area = max(1, page["img_width"] * page["img_height"])
         suspicious_blocks = 0
         for block in page["blocks"]:
