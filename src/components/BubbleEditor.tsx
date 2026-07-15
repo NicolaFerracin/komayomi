@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { api } from '../api'
 import type { LlmStatus, RubySpan, TextBlock, VisionProposal } from '../types'
 import { preferredProvider } from '../preferences'
+import { AiProviderStatus } from './AiProviderStatus'
 
 export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, onSaved }: {
   volumeId: string
@@ -80,7 +81,8 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
         <button className="secondary-button" onClick={reprocess} disabled={visionBusy || !provider} title={!provider ? 'Configure an API key in .env' : 'Sends only this cropped region after you click'}><RefreshCw className={visionBusy ? 'spin' : ''} size={16}/> {visionBusy ? 'Reading crop…' : 'Reprocess with vision'}</button>
         <button className="primary-button" onClick={save}>{saved ? <><Check size={17}/> Saved</> : 'Save correction'}</button>
       </div>
-      {status && <div className="provider-row"><ShieldCheck size={14}/><span>Nothing is sent until you click.</span><select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">No provider configured</option>{status.providers.map((item) => <option key={item.id} value={item.id} disabled={!item.configured}>{item.name} · {item.model}{!item.configured ? ' (no key)' : ''}</option>)}</select></div>}
+      <div className="provider-row"><ShieldCheck size={14}/><span>Nothing is sent until you click.</span></div>
+      <AiProviderStatus status={status} provider={provider}/>
       {visionError && <div className="error-note">{visionError}</div>}
       {proposal && <section className="vision-proposal"><span className="eyebrow">VISION PROPOSAL · NOT SAVED</span><p>{proposal.proposal.summary}</p>{proposal.proposal.lines.map((line, index) => <div key={index}><small>{Math.round(line.confidence * 100)}% confidence</small><strong>{renderRuby(line.text, line.ruby)}</strong></div>)}<button className="primary-button" onClick={acceptProposal}><Check size={16}/> Use this proposal in editor</button><button className="text-button" onClick={() => setProposal(null)}>Discard</button></section>}
         <button className="text-button" onClick={() => { setLines([...block.raw_lines]); setRuby(block.raw_lines.map(() => [])); setMarkups([...block.raw_lines]) }}><RotateCcw size={14}/> Restore raw OCR</button>

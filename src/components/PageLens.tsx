@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { AiHistoryItem, LensAnalysis, LlmStatus, MangaPage, PageVisionProposal } from '../types'
 import { preferredProvider } from '../preferences'
+import { AiProviderStatus } from './AiProviderStatus'
 
 export function PageLens({ volumeId, page, pageData, initialQuestion='', onClose, onPageApplied }: { volumeId: string; page: number; pageData: MangaPage; initialQuestion?:string; onClose: () => void; onPageApplied: () => void }) {
   const [status, setStatus] = useState<LlmStatus | null>(null)
@@ -34,14 +35,13 @@ export function PageLens({ volumeId, page, pageData, initialQuestion='', onClose
     if (!pageVision) return
     await api.applyVisionPage(volumeId, page, pageVision.proposal.blocks); onPageApplied(); onClose()
   }
-  const activeProvider = status?.providers.find((item) => item.id === provider)
   return (
     <aside className="tool-panel page-lens">
       <header><div><span className="eyebrow">OPT-IN CONTEXT</span><h2>Page Lens</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header>
       {!result && <><div className="lens-orbit"><div><Eye size={30}/></div><i/><i/><i/></div><h3>See what sits beneath the words.</h3>
       <p>Notice creative furigana, wordplay, register, cultural references, and relationships between dialogue and artwork.</p></>}
       <div className="privacy-note"><ShieldCheck size={18}/><div><strong>{result ? 'This analysis was explicitly requested.' : 'Nothing has been shared.'}</strong><span>External processing happens only when you click an action below.</span></div></div>
-      <div className="lens-provider-status"><span>AI configured in Settings</span><strong>{activeProvider ? `${activeProvider.name} · ${activeProvider.model}` : 'No provider configured'}</strong></div>
+      <AiProviderStatus status={status} provider={provider}/>
       <section className="lens-task lens-task--analyze"><div className="lens-task__title"><Sparkles size={19}/><div><span>UNDERSTAND</span><h3>Analyze meaning &amp; context</h3></div></div><p>Explain language, unusual readings, wordplay, cultural references, and how the dialogue relates to the artwork.</p><label className="lens-question"><span><MessageCircle size={13}/> WHAT SHOULD IT FOCUS ON? <i>optional</i></span><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Leave blank for a general page analysis, or ask a specific question."/></label><label className="spoiler-toggle"><input type="checkbox" checked={includeNext} onChange={(event) => setIncludeNext(event.target.checked)}/><span/><div><strong>Include next page for context</strong><small>Off by default to avoid spoilers</small></div></label><button className="lens-button" onClick={analyze} disabled={busy || !provider}>{busy ? <><LoaderCircle className="spin" size={17}/> Analyzing…</> : <><Sparkles size={17}/>{result ? 'Analyze again' : 'Analyze meaning & context'}</>}</button></section>
       {message && <div className="error-note">{message}</div>}
       {result && <section className="lens-results"><div className="lens-result-meta">ANALYSIS RESULT · {result.provider} · {result.model}{result.cached && ' · cached'}</div><h3>{result.analysis.summary}</h3>{result.analysis.notes.map((note, index) => <article key={index}><span>{note.type} · {Math.round(note.confidence * 100)}%</span><h4>{note.title}</h4><p>{note.explanation}</p><blockquote>{note.evidence}</blockquote></article>)}{!result.analysis.notes.length && <p className="muted">Nothing noteworthy was found on this page—and that is a useful answer too.</p>}</section>}
