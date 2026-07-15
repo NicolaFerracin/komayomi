@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookOpen, ChevronLeft, ChevronRight, CircleHelp, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookOpen, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -12,6 +12,7 @@ import { SettingsPanel } from './SettingsPanel'
 import { PageNavigator } from './PageNavigator'
 import { ShortcutGuide } from './ShortcutGuide'
 import { readerPreferences, type ReaderPreferences } from '../preferences'
+import { LookupHistoryPanel, type RecentLookup } from './LookupHistoryPanel'
 
 function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   if (!spans.length) return <>{text}</>
@@ -120,6 +121,9 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [navigator, setNavigator] = useState(false)
   const [bookmarks, setBookmarks] = useState<Set<number>>(new Set())
   const [shortcuts, setShortcuts] = useState(false)
+  const [lookupHistory,setLookupHistory]=useState(false)
+  const [recentLookups,setRecentLookups]=useState<RecentLookup[]>(()=>{try{return JSON.parse(localStorage.getItem(`komayomi.lookups.${initialData.volume_id}`)||'[]')}catch{return[]}})
+  const [fullscreen,setFullscreen]=useState(Boolean(document.fullscreenElement))
   const [display,setDisplay]=useState<ReaderPreferences>(readerPreferences)
   const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
@@ -131,17 +135,18 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   useEffect(()=>{api.bookmarks(data.volume_id).then((items)=>setBookmarks(new Set(items))).catch(()=>undefined)},[data.volume_id])
   useEffect(()=>{const update=(event:Event)=>setDisplay((event as CustomEvent<ReaderPreferences>).detail);window.addEventListener('komayomi:reader-preferences',update);return()=>window.removeEventListener('komayomi:reader-preferences',update)},[])
   useEffect(()=>{for(const index of [pageIndex-1,pageIndex+1]){const source=data.pages[index]?.image_url;if(source){const image=new Image();image.src=source}}},[data.pages,pageIndex])
+  useEffect(()=>{const change=()=>setFullscreen(Boolean(document.fullscreenElement));document.addEventListener('fullscreenchange',change);return()=>document.removeEventListener('fullscreenchange',change)},[])
 
   function move(delta: number) {
     if(!closeEditor())return
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
-    setPageIndex(next); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
   function goToPage(next: number) {
     if(!closeEditor())return
-    setPageIndex(next); setLens(false); setNavigator(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
@@ -149,6 +154,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     if (!selectionAction) return
     if(!closeEditor())return
     setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block})
+    const recent={text:selectionAction.text,context:selectionAction.context,page:pageIndex,createdAt:new Date().toISOString()};setRecentLookups((items)=>{const next=[recent,...items.filter((item)=>!(item.text===recent.text&&item.context===recent.context&&item.page===recent.page))].slice(0,30);localStorage.setItem(`komayomi.lookups.${data.volume_id}`,JSON.stringify(next));return next})
     setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
   }
 
@@ -170,13 +176,17 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     setData((current)=>({...current,pages:current.pages.map((item,index)=>index===pageIndex?{...item,ocr_quality:{...item.ocr_quality,reviewed:true}}:item)}))
   }
 
+  function reopenLookup(item:RecentLookup){if(!closeEditor())return;setPageIndex(item.page);api.position(data.volume_id,item.page).catch(()=>undefined);setLookup({text:item.text,context:item.context,ruby:[],block:-1});setLookupHistory(false);setLens(false);setNavigator(false);setSettings(false)}
+
+  async function toggleFullscreen(){if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}
+
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key === 'ArrowLeft') move(1)
       if (event.key === 'ArrowRight') move(-1)
-      if (event.key === 'Escape') { if(!closeEditor())return;setLens(false); setNavigator(false); setSettings(false); setLookup(null); setShortcuts(false) }
+      if (event.key === 'Escape') { if(!closeEditor())return;setLens(false); setNavigator(false);setLookupHistory(false); setSettings(false); setLookup(null); setShortcuts(false) }
       if (event.key === '?' ) setShortcuts((value)=>!value)
       if (event.key.toLowerCase() === 'g') { if(!closeEditor())return;setNavigator(true); setLens(false); setSettings(false); setLookup(null) }
       if (event.key.toLowerCase() === 'l') { if(!closeEditor())return;setLens(true); setLensSeed(''); setNavigator(false); setSettings(false) }
@@ -254,21 +264,23 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     <main className="reader-shell" style={{'--tool-panel-width':`${display.panelWidth}px`} as CSSProperties}>
       <header className="reader-header">
         <div className="reader-header__left"><button className="icon-button dark" onClick={()=>{if(closeEditor())onExit()}}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><strong>{data.volume}</strong></div></div>
-        <button className="reader-progress" title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(true);setLens(false);setLookup(null);setSettings(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
+        <button className="reader-progress" title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(true);setLens(false);setLookup(null);setSettings(false);setLookupHistory(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
         <div className="reader-tools">
           <button className={showOverlays ? 'active' : ''} onClick={() => setShowOverlays(!showOverlays)} title="Toggle text overlays"><Highlighter size={18}/></button>
-          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { if(!closeEditor())return;setLayoutMode(!layoutMode); setShowOverlays(true); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
+          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { if(!closeEditor())return;setLayoutMode(!layoutMode); setShowOverlays(true); setLens(false); setNavigator(false); setLookup(null);setLookupHistory(false); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
           <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
-          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { if(!closeEditor())return;setLens(!lens); setLensSeed(''); setNavigator(false); setSettings(false) }}><Eye size={18}/><span>Page Lens</span></button>
-          <button className={navigator?'active':''} title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(!navigator);setLens(false);setLookup(null);setSettings(false)}}><Grid3X3 size={18}/></button>
+          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { if(!closeEditor())return;setLens(!lens); setLensSeed(''); setNavigator(false); setSettings(false);setLookupHistory(false) }}><Eye size={18}/><span>Page Lens</span></button>
+          <button className={navigator?'active':''} title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(!navigator);setLens(false);setLookup(null);setSettings(false);setLookupHistory(false)}}><Grid3X3 size={18}/></button>
           <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
-          <button className={settings?'active':''} title="Reader settings" onClick={()=>{if(!closeEditor())return;setSettings(!settings);setLens(false);setNavigator(false);setLookup(null)}}><Settings2 size={18}/></button>
+          <button className={lookupHistory?'active':''} title="Recent lookups" onClick={()=>{if(!closeEditor())return;setLookupHistory(!lookupHistory);setSettings(false);setLens(false);setNavigator(false);setLookup(null)}}><Clock3 size={18}/></button>
+          <button className={settings?'active':''} title="Reader settings" onClick={()=>{if(!closeEditor())return;setSettings(!settings);setLens(false);setNavigator(false);setLookup(null);setLookupHistory(false)}}><Settings2 size={18}/></button>
+          <button title={fullscreen?'Exit full screen':'Enter full screen'} onClick={toggleFullscreen}>{fullscreen?<Minimize2 size={18}/>:<Maximize2 size={18}/>}</button>
           <button title="Keyboard shortcuts (?)" onClick={()=>setShortcuts(true)}><CircleHelp size={18}/></button>
         </div>
       </header>
 
-      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || lookup || settings || navigator) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
+      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || lookup || settings || navigator || lookupHistory) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
         {layoutMode && <div className="layout-mode-banner"><Move size={15}/><div><strong>Layout edit</strong><span>Drag a region to move it · pull its corner to resize · changes save on release</span></div><button onClick={undoLayout} disabled={!layoutHistory.length}><Undo2 size={13}/> Undo</button><button onClick={() => setLayoutMode(false)}>Done</button></div>}
         {page.ocr_quality?.suspicious && !page.ocr_quality.reviewed && (
           <div className="ocr-warning">
@@ -299,6 +311,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       />}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {navigator && <PageNavigator pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
+      {lookupHistory&&<LookupHistoryPanel items={recentLookups} onChoose={reopenLookup} onClose={()=>setLookupHistory(false)} onClear={()=>{setRecentLookups([]);localStorage.removeItem(`komayomi.lookups.${data.volume_id}`)}}/>}
       {shortcuts && <ShortcutGuide onClose={()=>setShortcuts(false)}/>}
       {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
       {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} volumeId={data.volume_id} pageIndex={pageIndex} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
