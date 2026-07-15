@@ -12,7 +12,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -135,6 +135,10 @@ def initialize() -> None:
                 normalized_text TEXT NOT NULL, normalized_reading TEXT NOT NULL,
                 PRIMARY KEY (volume_id, page_index, block_index)
             );
+            CREATE TABLE IF NOT EXISTS processing_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, volume_id TEXT NOT NULL,
+                message TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
         db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
@@ -151,6 +155,7 @@ def initialize() -> None:
         if "content_fingerprint" not in volume_columns: db.execute("ALTER TABLE volumes ADD COLUMN content_fingerprint TEXT")
         db.execute("CREATE INDEX IF NOT EXISTS volume_content_fingerprint ON volumes(content_fingerprint)")
         db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (5)")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (6)")
 
 
 def _volume(row: sqlite3.Row) -> Volume:
@@ -375,6 +380,20 @@ def replace_search_index(volume_id: str, rows: list[tuple[int, int, str, str, st
             "INSERT INTO search_index VALUES (?, ?, ?, ?, ?, ?)",
             [(volume_id, *row) for row in rows],
         )
+
+
+def append_processing_log(volume_id: str, message: str) -> None:
+    message = message.strip()
+    if not message: return
+    with connection() as conn:
+        conn.execute("INSERT INTO processing_logs(volume_id,message) VALUES (?,?)", (volume_id, message))
+        conn.execute("DELETE FROM processing_logs WHERE volume_id=? AND id NOT IN (SELECT id FROM processing_logs WHERE volume_id=? ORDER BY id DESC LIMIT 500)", (volume_id, volume_id))
+
+
+def processing_log(volume_id: str) -> list[dict]:
+    with connection() as conn:
+        rows = conn.execute("SELECT message,created_at FROM processing_logs WHERE volume_id=? ORDER BY id", (volume_id,)).fetchall()
+    return [dict(row) for row in rows]
 
 
 def save_grammar_explanation(item: dict) -> None:

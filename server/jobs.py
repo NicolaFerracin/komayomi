@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-from .db import get_volume, get_volumes, save_volume
+from .db import append_processing_log, get_volume, get_volumes, save_volume
 from .models import Volume
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,12 +29,13 @@ async def process_volume(volume: Volume) -> None:
             payload = json.loads(result.read_text(encoding="utf-8"))
             volume.status = "ready"; volume.error = None
             volume.processed_pages = len(payload["pages"]); volume.page_count = len(payload["pages"])
-            save_volume(volume); return
+            save_volume(volume); append_processing_log(volume.id, "Existing OCR output verified; volume is ready."); return
         except (OSError, json.JSONDecodeError, KeyError, TypeError):
             pass
     volume.status = "processing"
     volume.error = None
     save_volume(volume)
+    append_processing_log(volume.id, f"OCR started for {source.name} ({volume.page_count} pages).")
 
     process: asyncio.subprocess.Process | None = None
     log: list[str] = []
@@ -49,7 +50,8 @@ async def process_volume(volume: Volume) -> None:
             try:
                 line = await asyncio.wait_for(process.stdout.readline(), timeout=1)
                 if line:
-                    log.append(re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line.decode(errors="replace")))
+                    cleaned = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line.decode(errors="replace"))
+                    log.append(cleaned); append_processing_log(volume.id, cleaned)
                     log = log[-30:]
             except asyncio.TimeoutError:
                 pass
@@ -64,17 +66,20 @@ async def process_volume(volume: Volume) -> None:
         else:
             volume.status = "error"
             volume.error = "".join(log)[-2000:] or "Mokuro did not produce an output file."
+        append_processing_log(volume.id, "OCR completed successfully." if volume.status == "ready" else f"OCR failed: {volume.error}")
     except asyncio.CancelledError:
         if process and process.returncode is None:
             process.terminate()
             try: await asyncio.wait_for(process.wait(), timeout=3)
             except asyncio.TimeoutError: process.kill(); await process.wait()
         volume.status = "queued"; volume.error = None
+        append_processing_log(volume.id, "OCR stopped; job returned to the queue.")
         save_volume(volume)
         raise
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
         volume.status = "error"
         volume.error = str(error)
+        append_processing_log(volume.id, f"OCR failed: {error}")
     save_volume(volume)
 
 
@@ -109,4 +114,5 @@ async def pause_volume(volume_id: str) -> bool:
     volume = get_volume(volume_id)
     if not volume or volume.status == "ready": return False
     volume.status = "paused"; volume.error = None; save_volume(volume)
+    append_processing_log(volume_id, "OCR paused by the reader.")
     return True

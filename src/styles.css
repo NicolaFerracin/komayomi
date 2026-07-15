@@ -250,6 +250,8 @@ ruby rt { color: var(--red); font-size: .48em; font-weight: 500; }
 .kanji-stats { display: flex; flex-wrap: wrap; gap: 5px; }.kanji-stats span { padding: 3px 5px; color: var(--faint); border: 1px solid var(--line); font: 7px var(--mono); text-transform: uppercase; }
 .save-word-button { width: 100%; height: 46px; margin-top: 22px; border: 1px solid var(--line); color: var(--ink); background: transparent; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }.save-word-button:hover:not(:disabled) { color: white; background: var(--indigo); }.save-word-button:disabled { color: #526056; background: #e2e7df; }.save-word-button span { font: 7px var(--mono); text-transform: uppercase; }
 
+.processing-log-dialog{width:min(760px,calc(100vw - 40px));max-height:80vh;padding:24px;background:var(--paper);border:1px solid var(--line);box-shadow:0 24px 80px #0008}.processing-log-dialog header{display:flex;justify-content:space-between;align-items:flex-start}.processing-log-dialog header span{color:var(--red);font:9px var(--mono);letter-spacing:.14em}.processing-log-dialog header h2{margin:6px 0 18px}.processing-log-dialog header button{border:0;background:none;cursor:pointer}.processing-log-dialog pre{max-height:55vh;margin:0;padding:18px;overflow:auto;white-space:pre-wrap;background:#181a18;color:#d7ddd5;font:11px/1.65 var(--mono)}
+
 @media (max-width: 900px) {
   .library-shell { width: min(100% - 32px, 720px); }
   .library-hero { padding: 60px 0; display: block; }.library-hero > p { margin-top: 35px; width: min(100%, 420px); }

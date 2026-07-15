@@ -1,7 +1,8 @@
-import { BookMarked, BookOpen, Clock3, DatabaseBackup, Pause, Pencil, Plus, RotateCw, Sparkles, Upload } from 'lucide-react'
-import type { CSSProperties } from 'react'
+import { BookMarked, BookOpen, Clock3, DatabaseBackup, FileText, Pause, Pencil, Plus, RotateCw, Sparkles, Upload, X } from 'lucide-react'
+import { useState, type CSSProperties } from 'react'
 import { Brand } from './Brand'
 import type { Volume } from '../types'
+import { api } from '../api'
 
 export function Library({ volumes, restoring, onImport, onOpen, onStudy, onEdit, onRetry, onPause, onRestore }: {
   volumes: Volume[]
@@ -14,6 +15,8 @@ export function Library({ volumes, restoring, onImport, onOpen, onStudy, onEdit,
   onRestore:(file:File)=>void
   restoring:boolean
 }) {
+  const [log,setLog]=useState<{volume:Volume;lines:Array<{message:string;created_at:string}>}|null>(null)
+  const openLog=async(volume:Volume)=>setLog({volume,lines:await api.processingLog(volume.id)})
   return (
     <main className="library-shell">
       <header className="library-header">
@@ -57,7 +60,7 @@ export function Library({ volumes, restoring, onImport, onOpen, onStudy, onEdit,
                   <div className="processing-status">
                     <div><Sparkles size={14}/> {volume.status === 'error' ? 'Needs attention' : volume.status==='paused'?'Processing paused':'Reading the ink'}<span>{Math.round(volume.progress * 100)}%</span></div>
                     <div className="progress-track"><span style={{width: `${volume.progress * 100}%`}}/></div>
-                    <div className="processing-actions">{volume.status==='processing'||volume.status==='queued'?<button onClick={()=>onPause(volume)}><Pause size={12}/> Pause</button>:<button onClick={()=>onRetry(volume)}><RotateCw size={12}/> {volume.status==='error'?'Retry OCR':'Resume'}</button>}</div>
+                    <div className="processing-actions">{volume.status==='processing'||volume.status==='queued'?<button onClick={()=>onPause(volume)}><Pause size={12}/> Pause</button>:<button onClick={()=>onRetry(volume)}><RotateCw size={12}/> {volume.status==='error'?'Retry OCR':'Resume'}</button>}<button onClick={()=>openLog(volume)}><FileText size={12}/> View log</button></div>
                   </div>
                 )}
               </div>
@@ -65,6 +68,7 @@ export function Library({ volumes, restoring, onImport, onOpen, onStudy, onEdit,
           ))}
         </section>
       )}
+      {log&&<div className="modal-backdrop" onMouseDown={(event)=>{if(event.target===event.currentTarget)setLog(null)}}><section className="processing-log-dialog" role="dialog" aria-label="OCR processing log"><header><div><span>OCR DIAGNOSTICS</span><h2>{log.volume.title}</h2></div><button onClick={()=>setLog(null)}><X size={18}/></button></header><pre>{log.lines.length?log.lines.map((line)=>`[${new Date(line.created_at).toLocaleTimeString()}] ${line.message}`).join('\n'):'No diagnostic messages have been recorded yet.'}</pre></section></div>}
     </main>
   )
 }

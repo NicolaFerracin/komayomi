@@ -391,6 +391,12 @@ async def pause_processing(volume_id: str):
     return require_volume(volume_id).json()
 
 
+@app.get("/api/volumes/{volume_id}/processing-log")
+def processing_log(volume_id: str):
+    require_volume(volume_id)
+    return db.processing_log(volume_id)
+
+
 @app.get("/api/volumes/{volume_id}/reader")
 def reader(volume_id: str):
     volume = require_volume(volume_id)
