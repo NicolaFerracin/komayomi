@@ -11,6 +11,7 @@ import { LookupPanel } from './LookupPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { PageNavigator } from './PageNavigator'
 import { ShortcutGuide } from './ShortcutGuide'
+import { readerPreferences, type ReaderPreferences } from '../preferences'
 
 function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   if (!spans.length) return <>{text}</>
@@ -27,10 +28,10 @@ function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   return <>{nodes}</>
 }
 
-function BubbleOverlay({ block, pageWidth, pageHeight, active, layoutMode, onClick, onSelection, onGeometryChange }: {
+function BubbleOverlay({ block, pageWidth, pageHeight, textScale, active, layoutMode, onClick, onSelection, onGeometryChange }: {
   block: TextBlock; pageWidth: number; pageHeight: number; onClick: () => void
   onSelection: (text: string, ruby: RubySpan[], context: string, x: number, y: number) => void
-  active: boolean; layoutMode: boolean; onGeometryChange: (box: [number, number, number, number], commit: boolean, original?: [number, number, number, number]) => void
+  active: boolean; layoutMode: boolean; textScale:number; onGeometryChange: (box: [number, number, number, number], commit: boolean, original?: [number, number, number, number]) => void
 }) {
   const geometryDrag = useRef<{x: number; y: number; box: [number, number, number, number]; resize: boolean} | null>(null)
   const [rawX1, rawY1, rawX2, rawY2] = block.box
@@ -43,7 +44,7 @@ function BubbleOverlay({ block, pageWidth, pageHeight, active, layoutMode, onCli
   const style = {
     left: `${x1 / pageWidth * 100}%`, top: `${y1 / pageHeight * 100}%`,
     width: `${(x2 - x1) / pageWidth * 100}%`, height: `${(y2 - y1) / pageHeight * 100}%`,
-    '--ocr-size': `${Math.max(1.25, block.font_size / pageWidth * 100)}cqw`,
+    '--ocr-size': `${Math.max(1.25, block.font_size / pageWidth * 100)*textScale}cqw`,
   } as CSSProperties
 
   function copyWithoutNestedRuby(event: ReactClipboardEvent<HTMLSpanElement>) {
@@ -118,6 +119,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [navigator, setNavigator] = useState(false)
   const [bookmarks, setBookmarks] = useState<Set<number>>(new Set())
   const [shortcuts, setShortcuts] = useState(false)
+  const [display,setDisplay]=useState<ReaderPreferences>(readerPreferences)
   const [lookup, setLookup] = useState<{text: string; ruby: RubySpan[]; context: string; block: number} | null>(null)
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
   const [layoutHistory, setLayoutHistory] = useState<Array<{page:number;block:number;box:[number,number,number,number]}>>([])
@@ -126,6 +128,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const page = data.pages[pageIndex]
 
   useEffect(()=>{api.bookmarks(data.volume_id).then((items)=>setBookmarks(new Set(items))).catch(()=>undefined)},[data.volume_id])
+  useEffect(()=>{const update=(event:Event)=>setDisplay((event as CustomEvent<ReaderPreferences>).detail);window.addEventListener('komayomi:reader-preferences',update);return()=>window.removeEventListener('komayomi:reader-preferences',update)},[])
   useEffect(()=>{for(const index of [pageIndex-1,pageIndex+1]){const source=data.pages[index]?.image_url;if(source){const image=new Image();image.src=source}}},[data.pages,pageIndex])
 
   function move(delta: number) {
@@ -233,7 +236,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   }
 
   return (
-    <main className="reader-shell">
+    <main className="reader-shell" style={{'--tool-panel-width':`${display.panelWidth}px`} as CSSProperties}>
       <header className="reader-header">
         <div className="reader-header__left"><button className="icon-button dark" onClick={onExit}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><strong>{data.volume}</strong></div></div>
         <button className="reader-progress" title="Browse pages" onClick={()=>{setNavigator(true);setLens(false);setEditor(null);setLookup(null);setSettings(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
@@ -265,7 +268,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           height: `calc((100vh - 172px) * ${zoom})`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} active={layoutMode || selectionAction?.block === index || lookup?.block === index} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
