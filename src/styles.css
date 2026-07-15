@@ -128,7 +128,7 @@ body::before { content: ""; position: fixed; inset: 0; opacity: .22; pointer-eve
 .reader-tools .layout-tool.active { color: white; background: var(--red); }
 .reader-tools .lens-tool { color: #e4c6a0; border: 1px solid rgba(228,198,160,.25); }
 .reader-tools span { font: 12px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
-.reader-progress { display: flex; align-items: center; gap: 12px; color: #c0bbb1; font: 12px var(--mono); }
+.reader-progress { width: 100%; padding: 10px 0; border: 0; display: flex; align-items: center; gap: 12px; color: #c0bbb1; background: transparent; font: 12px var(--mono); cursor: pointer; }
 .reader-progress div { flex: 1; height: 2px; background: #3f3c36; }
 .reader-progress i { height: 100%; display: block; background: var(--red); transition: width .3s; }
 .reader-stage { height: calc(100vh - 124px); display: flex; justify-content: center; align-items: flex-start; padding: 24px 70px; transition: padding-right .3s; position: relative; overflow: auto; }
@@ -155,6 +155,7 @@ ruby rt { color: var(--red); font-size: .48em; font-weight: 500; }
 .page-turn--prev { left: 0; }.page-turn--next { right: 0; }
 .reader-footer { height: 42px; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; color: #bbb6ac; border-top: 1px solid rgba(255,255,255,.08); font: 12px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
 .reader-footer span { display: flex; align-items: center; gap: 7px; }
+.reader-footer button { padding: 7px 0; border: 0; display: flex; align-items: center; gap: 7px; color: inherit; background: transparent; cursor: pointer; font: inherit; text-transform: inherit; letter-spacing: inherit; }.reader-footer button:hover,.reader-progress:hover { color: white; }
 .selection-action { position: fixed; z-index: 12; max-width: 240px; height: 34px; padding: 0 10px; border: 1px solid rgba(255,255,255,.15); color: white; background: #292722; box-shadow: 0 5px 18px rgba(0,0,0,.35); display: flex; align-items: center; gap: 7px; cursor: pointer; font: 9px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
 .selection-action > span { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cfc8b9; text-transform: none; letter-spacing: 0; }
 .ocr-warning { position: fixed; z-index: 7; left: 86px; top: 92px; width: 270px; padding: 13px 15px; color: #2a2721; background: rgba(244,240,230,.96); border-left: 3px solid var(--red); box-shadow: 5px 6px 18px rgba(0,0,0,.22); }

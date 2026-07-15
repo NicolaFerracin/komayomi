@@ -126,6 +126,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const page = data.pages[pageIndex]
 
   useEffect(()=>{api.bookmarks(data.volume_id).then((items)=>setBookmarks(new Set(items))).catch(()=>undefined)},[data.volume_id])
+  useEffect(()=>{for(const index of [pageIndex-1,pageIndex+1]){const source=data.pages[index]?.image_url;if(source){const image=new Image();image.src=source}}},[data.pages,pageIndex])
 
   function move(delta: number) {
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
@@ -235,7 +236,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     <main className="reader-shell">
       <header className="reader-header">
         <div className="reader-header__left"><button className="icon-button dark" onClick={onExit}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><strong>{data.volume}</strong></div></div>
-        <div className="reader-progress"><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></div>
+        <button className="reader-progress" title="Browse pages" onClick={()=>{setNavigator(true);setLens(false);setEditor(null);setLookup(null);setSettings(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
         <div className="reader-tools">
           <button className={showOverlays ? 'active' : ''} onClick={() => setShowOverlays(!showOverlays)} title="Toggle text overlays"><Highlighter size={18}/></button>
           <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { setLayoutMode(!layoutMode); setShowOverlays(true); setEditor(null); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
@@ -284,7 +285,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       {selectionAction && !editor && <button className="selection-action" style={{left: Math.min(selectionAction.x, window.innerWidth - 150), top: Math.min(selectionAction.y + 8, window.innerHeight - 48)}} onMouseDown={(event) => event.stopPropagation()} onClick={openLookup}><Search size={13}/> Look up <span>{selectionAction.text}</span></button>}
       {lookup && editor === null && !lens && !navigator && !settings && <LookupPanel query={lookup.text} sentence={lookup.context} rubySpans={lookup.ruby} volumeId={data.volume_id} pageIndex={pageIndex} onClose={() => setLookup(null)} onAskAI={(sentence,focus)=>{setLensSeed(`Explain “${focus}” in this block:\n${sentence}`);setLookup(null);setLens(true)}}/>}
 
-      <footer className="reader-footer"><span><LibraryIcon size={14}/> {data.title}</span><span>← next page · previous page →</span><span><BookOpen size={14}/> {pageIndex + 1} / {data.pages.length}</span></footer>
+      <footer className="reader-footer"><span><LibraryIcon size={14}/> {data.title}</span><span>← next page · previous page →</span><button onClick={()=>setNavigator(true)}><BookOpen size={14}/> {pageIndex + 1} / {data.pages.length}</button></footer>
     </main>
   )
 }
