@@ -115,6 +115,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [showOverlays, setShowOverlays] = useState(true)
   const [layoutMode, setLayoutMode] = useState(false)
   const [panning, setPanning] = useState(false)
+  const [panOffset,setPanOffset]=useState({x:0,y:0})
   const [editor, setEditor] = useState<number | null>(null)
   const [editorDirty,setEditorDirty]=useState(false)
   const [lens, setLens] = useState(false)
@@ -133,11 +134,12 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [selectionAction, setSelectionAction] = useState<{text: string; ruby: RubySpan[]; context: string; block: number; x: number; y: number} | null>(null)
   const [layoutHistory, setLayoutHistory] = useState<Array<{page:number;block:number;box:[number,number,number,number]}>>([])
   const stageRef = useRef<HTMLElement>(null)
-  const dragRef = useRef({ x: 0, y: 0, left: 0, top: 0 })
+  const dragRef = useRef({ x: 0, y: 0, offsetX:0, offsetY:0 })
   const page = data.pages[pageIndex]
 
   useEffect(()=>{api.bookmarks(data.volume_id).then((items)=>setBookmarks(new Set(items))).catch(()=>undefined)},[data.volume_id])
-  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory||lookup)setMeaningCheck(false)},[editor,lens,settings,navigator,lookupHistory,lookup])
+  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory)setMeaningCheck(false)},[editor,lens,settings,navigator,lookupHistory])
+  useEffect(()=>setPanOffset({x:0,y:0}),[pageIndex])
   useEffect(()=>{const update=(event:Event)=>setDisplay((event as CustomEvent<ReaderPreferences>).detail);window.addEventListener('komayomi:reader-preferences',update);return()=>window.removeEventListener('komayomi:reader-preferences',update)},[])
   useEffect(()=>{for(const index of [pageIndex-1,pageIndex+1]){const source=data.pages[index]?.image_url;if(source){const image=new Image();image.src=source}}},[data.pages,pageIndex])
   useEffect(()=>{const change=()=>setFullscreen(Boolean(document.fullscreenElement));document.addEventListener('fullscreenchange',change);return()=>document.removeEventListener('fullscreenchange',change)},[])
@@ -160,7 +162,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     if(!closeEditor())return
     setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block})
     recentLookups.add({text:selectionAction.text,context:selectionAction.context,page:pageIndex,createdAt:new Date().toISOString()})
-    setLens(false);setMeaningCheck(false); setNavigator(false); setSettings(false); setSelectionAction(null)
+    setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
   }
 
   function closeEditor() {
@@ -231,15 +233,12 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     const stage = stageRef.current
     if (!stage) return
     event.preventDefault(); stage.setPointerCapture(event.pointerId); setPanning(true)
-    dragRef.current = { x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop }
+    dragRef.current = { x:event.clientX,y:event.clientY,offsetX:panOffset.x,offsetY:panOffset.y }
   }
 
   function movePan(event: ReactPointerEvent<HTMLElement>) {
     if (!panning) return
-    const stage = stageRef.current
-    if (!stage) return
-    stage.scrollLeft = dragRef.current.left - (event.clientX - dragRef.current.x)
-    stage.scrollTop = dragRef.current.top - (event.clientY - dragRef.current.y)
+    setPanOffset({x:dragRef.current.offsetX+(event.clientX-dragRef.current.x),y:dragRef.current.offsetY+(event.clientY-dragRef.current.y)})
   }
 
   function endPan(event: ReactPointerEvent<HTMLElement>) {
@@ -250,6 +249,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   function zoomAt(next: number, clientX?: number, clientY?: number) {
     const stage = stageRef.current
     const bounded = Math.min(2.5, Math.max(.6, next))
+    if(bounded===1)setPanOffset({x:0,y:0})
     if (!stage || bounded === zoom) return setZoom(bounded)
     const rect = stage.getBoundingClientRect()
     const x = (clientX ?? rect.left + rect.width / 2) - rect.left + stage.scrollLeft
@@ -276,7 +276,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { if(!closeEditor())return;setLayoutMode(!layoutMode); setShowOverlays(true); setLens(false); setNavigator(false); setLookup(null);setLookupHistory(false); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
           <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
-          <button className={meaningCheck?'active meaning-tool':'meaning-tool'} title="Check your understanding" onClick={()=>{if(!closeEditor())return;setMeaningCheck(!meaningCheck);setLens(false);setNavigator(false);setSettings(false);setLookupHistory(false);setLookup(null)}}><CheckCircle2 size={18}/><span>Meaning Check</span></button>
+          <button className={meaningCheck?'active meaning-tool':'meaning-tool'} title="Check your understanding" onClick={()=>{if(!closeEditor())return;if(meaningCheck&&lookup){setLookup(null);return}setMeaningCheck(!meaningCheck);setLens(false);setNavigator(false);setSettings(false);setLookupHistory(false);setLookup(null)}}><CheckCircle2 size={18}/><span>Meaning Check</span></button>
           <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { if(!closeEditor())return;setLens(!lens);setMeaningCheck(false); setLensSeed(''); setNavigator(false); setSettings(false);setLookupHistory(false) }}><Eye size={18}/><span>Page Lens</span></button>
           <button className={navigator?'active':''} title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(!navigator);setLens(false);setLookup(null);setSettings(false);setLookupHistory(false)}}><Grid3X3 size={18}/></button>
           <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
@@ -301,6 +301,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         <div className="page-wrap" style={{
           width: `calc((100vh - 172px) * ${page.img_width / page.img_height} * ${zoom})`,
           height: `calc((100vh - 172px) * ${zoom})`,
+          transform:`translate3d(${panOffset.x}px,${panOffset.y}px,0)`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
           {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} active={layoutMode || selectionAction?.block === index || lookup?.block === index || (searchMatch?.page===pageIndex&&searchMatch.block===index)} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
@@ -317,7 +318,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         onClose={() => setLens(false)}
         onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}
       />}
-      {meaningCheck&&<MeaningCheck volumeId={data.volume_id} pageIndex={pageIndex} page={page} onClose={()=>setMeaningCheck(false)}/>}
+      {meaningCheck&&<MeaningCheck volumeId={data.volume_id} pageIndex={pageIndex} page={page} hidden={Boolean(lookup)} onClose={()=>setMeaningCheck(false)}/>}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {navigator && <PageNavigator volumeId={data.volume_id} pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
       {lookupHistory&&<LookupHistoryPanel items={recentLookups.items} onChoose={reopenLookup} onClose={()=>setLookupHistory(false)} onClear={recentLookups.clear}/>}

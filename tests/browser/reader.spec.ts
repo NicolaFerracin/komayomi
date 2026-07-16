@@ -153,3 +153,21 @@ test('batches page comprehension answers into one Meaning Check',async({page})=>
   await expect(page.getByText('Meaning captured')).toBeVisible()
   await expect(page.getByText('Once upon a time',{exact:true})).toBeVisible()
 })
+
+test('preserves Meaning Check drafts while vocabulary temporarily covers it',async({page})=>{
+  await page.getByTitle('Check your understanding').click()
+  const answer=page.getByPlaceholder('What do you think this means?').first()
+  await answer.fill('A long time ago\nThis is my complete interpretation.')
+  await expect.poll(()=>answer.evaluate((field)=>field.clientHeight>=field.scrollHeight)).toBeTruthy()
+  await selectFirstBubble(page);await page.getByRole('button',{name:/Look up/}).click()
+  await expect(page.getByRole('heading',{name:'むかしむかし'})).toBeVisible()
+  await page.locator('.lookup-panel .icon-button').click()
+  await expect(page.getByRole('heading',{name:'Meaning Check'})).toBeVisible()
+  await expect(answer).toHaveValue('A long time ago\nThis is my complete interpretation.')
+})
+
+test('allows the artwork to be dragged beyond its viewport position',async({page})=>{
+  const stage=page.locator('.reader-stage');const box=await stage.boundingBox();if(!box)throw new Error('Reader stage missing')
+  await page.mouse.move(box.x+100,box.y+180);await page.mouse.down();await page.mouse.move(box.x+240,box.y+260,{steps:5});await page.mouse.up()
+  await expect(page.locator('.page-wrap')).toHaveCSS('transform',/matrix\(1, 0, 0, 1, 140, 80\)/)
+})
