@@ -599,12 +599,13 @@ MEANING_CHECK_SCHEMA = {
     "properties": {
         "summary": {"type": "string"},
         "evaluations": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {
-            "block_index": {"type": "integer"}, "meaning_score": {"type": "number"}, "literal_score": {"type": "number"},
+            "block_index": {"type": "integer"}, "literal_score": {"type": "number"},
             "verdict": {"type": "string"}, "literal_translation": {"type": "string"}, "natural_translation": {"type": "string"},
             "contextual_meaning": {"type": "string"}, "correct": {"type": "array", "items": {"type": "string"}},
             "missing": {"type": "array", "items": {"type": "string"}}, "added": {"type": "array", "items": {"type": "string"}},
             "incorrect": {"type": "array", "items": {"type": "string"}},
-        }, "required": ["block_index","meaning_score","literal_score","verdict","literal_translation","natural_translation","contextual_meaning","correct","missing","added","incorrect"]}},
+            "coverage": {"type":"array","items":{"type":"object","additionalProperties":False,"properties":{"japanese":{"type":"string"},"meaning":{"type":"string"},"status":{"type":"string"},"answer_evidence":{"type":"string"}},"required":["japanese","meaning","status","answer_evidence"]}},
+        }, "required": ["block_index","literal_score","verdict","literal_translation","natural_translation","contextual_meaning","correct","missing","added","incorrect","coverage"]}},
     }, "required": ["summary","evaluations"],
 }
 PAGE_VISION_SCHEMA = {
@@ -728,7 +729,11 @@ async def meaning_check(volume_id: str, page_index: int, request: MeaningCheckRe
     if not answers: raise HTTPException(400,"Write your understanding for at least one text block")
     if len(answers)>50: raise HTTPException(400,"A single check can contain at most 50 answers")
     page_context=[{"block_index":index,"japanese":"".join(block.get("lines",[])),"box":block.get("box"),"vertical":bool(block.get("vertical"))} for index,block in enumerate(blocks)]
-    prompt="""You are a careful Japanese manga comprehension evaluator. Compare the reader's interpretation with the Japanese, using the other page blocks only as context. Do not penalize natural rewording. Judge meaning accuracy separately from literal structural alignment. Scores are 0-100. List only concrete points under correct, missing, added, and incorrect; use empty arrays where appropriate. A missing nuance is not automatically an error. Literal translation should expose Japanese structure while remaining readable; natural translation should sound idiomatic. Never infer kanji that were written in kana. Return one evaluation for every answered block, using exactly its block_index.\n\n"""
+    prompt="""You are a strict but fair Japanese manga comprehension evaluator. Compare only the reader's submitted interpretation with the Japanese; never credit the reader for content that appears only in your own translation. Use other page blocks only as context.
+
+First decompose each answered Japanese block into all atomic semantic units: events, participants, setting, modifiers, tense/aspect, discourse markers, and important nuance. Put them in coverage. For every unit, status must be exactly captured, partial, missing, or incorrect. A captured or partial unit MUST include answer_evidence copied verbatim from the reader's answer; never paraphrase or invent evidence. If no exact excerpt supports it, mark it missing. Do not let understanding one clause earn credit for later untranslated clauses.
+
+Do not penalize natural rewording. Judge literal structural alignment separately, from 0-100, but consider the entire source block including omissions. List concrete points under the comparison categories. A missing nuance is not automatically an error, but an omitted event or clause is missing meaning. Literal translation should expose Japanese structure while remaining readable; natural translation should sound idiomatic. Never infer kanji that were written in kana. Return one evaluation for every answered block, using exactly its block_index.\n\n"""
     prompt += "PAGE BLOCKS:\n"+json.dumps(page_context,ensure_ascii=False)+"\n\nREADER ANSWERS:\n"+json.dumps(answers,ensure_ascii=False)
     if request.question: prompt += "\n\nREADER REQUEST:\n"+request.question.strip()
     cache_key=hashlib.sha256(((request.provider or "default")+str(request.include_artwork)+prompt).encode()).hexdigest()
@@ -739,15 +744,31 @@ async def meaning_check(volume_id: str, page_index: int, request: MeaningCheckRe
             image_bytes,mime=page_image(volume,page);result,provider=await structured_vision(request.provider,prompt,image_bytes,mime,MEANING_CHECK_SCHEMA)
         else: result,provider=await structured_text(request.provider,prompt,MEANING_CHECK_SCHEMA)
     except (ValueError,httpx.HTTPError,json.JSONDecodeError) as error: raise HTTPException(503,str(error))
-    answered={item["block_index"] for item in answers};evaluations=[]
+    answered={item["block_index"] for item in answers};answer_text={item["block_index"]:item["interpretation"] for item in answers};evaluations=[]
     for evaluation in result.get("evaluations",[]):
         if evaluation.get("block_index") not in answered: continue
-        evaluation["meaning_score"]=max(0,min(100,float(evaluation.get("meaning_score",0))))
-        evaluation["literal_score"]=max(0,min(100,float(evaluation.get("literal_score",0))))
+        units=evaluation.get("coverage",[])
+        if not units: raise HTTPException(503,"The AI returned no semantic coverage. Nothing was saved; please retry.")
+        source_answer=answer_text[evaluation["block_index"]].casefold();earned=0.0
+        for unit in units:
+            status=str(unit.get("status","")).lower();evidence=str(unit.get("answer_evidence","")).strip()
+            if status not in {"captured","partial","missing","incorrect"}: status="missing"
+            if status in {"captured","partial"} and (not evidence or evidence.casefold() not in source_answer): status="missing"
+            unit["status"]=status;unit["answer_evidence"]=evidence if status in {"captured","partial"} else ""
+            earned += 1 if status=="captured" else .5 if status=="partial" else 0
+        evaluation["meaning_score"]=round(earned/len(units)*100)
+        evaluation["literal_score"]=min(evaluation["meaning_score"],max(0,min(100,round(float(evaluation.get("literal_score",0))))))
+        evaluation["correct"]=[unit["meaning"] for unit in units if unit["status"]=="captured"]
+        evaluation["missing"]=[f"Partially captured: {unit['meaning']}" if unit["status"]=="partial" else unit["meaning"] for unit in units if unit["status"] in {"partial","missing"}]
+        evaluation["incorrect"]=[unit["meaning"] for unit in units if unit["status"]=="incorrect"]
+        score=evaluation["meaning_score"]
+        evaluation["verdict"]="Strong understanding" if score>=90 else "Mostly understood, with some missing meaning" if score>=70 else "Partial understanding; important meaning is still missing" if score>=45 else "Major parts of the meaning were not captured"
         evaluations.append(evaluation)
     if {item.get("block_index") for item in evaluations} != answered:
         raise HTTPException(503,"The AI returned incomplete feedback. Nothing was saved; please retry.")
     result["evaluations"]=evaluations
+    average=round(sum(item["meaning_score"] for item in evaluations)/len(evaluations))
+    result["summary"]=f"Your interpretation captured about {average}% of the evaluated meaning across {len(evaluations)} text block{'s' if len(evaluations)!=1 else ''}. Review the missing units below before comparing the full translations."
     item={"id":uuid.uuid4().hex,"volume_id":volume_id,"page_index":page_index,"cache_key":cache_key,"input":{"answers":answers,"include_artwork":request.include_artwork,"question":request.question},"result":result,"provider":provider.id,"model":provider.model,"created_at":now()}
     db.save_meaning_check(item)
     return {"id":item["id"],"check":result,"provider":provider.id,"model":provider.model,"cached":False,"created_at":item["created_at"]}
