@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -14,6 +14,7 @@ import { ShortcutGuide } from './ShortcutGuide'
 import { readerPreferences, type ReaderPreferences } from '../preferences'
 import { LookupHistoryPanel, type RecentLookup } from './LookupHistoryPanel'
 import { useRecentLookups } from '../hooks/useRecentLookups'
+import { MeaningCheck } from './MeaningCheck'
 
 function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   if (!spans.length) return <>{text}</>
@@ -117,6 +118,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [editor, setEditor] = useState<number | null>(null)
   const [editorDirty,setEditorDirty]=useState(false)
   const [lens, setLens] = useState(false)
+  const [meaningCheck,setMeaningCheck]=useState(false)
   const [lensSeed, setLensSeed] = useState('')
   const [settings, setSettings] = useState(false)
   const [navigator, setNavigator] = useState(false)
@@ -135,6 +137,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const page = data.pages[pageIndex]
 
   useEffect(()=>{api.bookmarks(data.volume_id).then((items)=>setBookmarks(new Set(items))).catch(()=>undefined)},[data.volume_id])
+  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory||lookup)setMeaningCheck(false)},[editor,lens,settings,navigator,lookupHistory,lookup])
   useEffect(()=>{const update=(event:Event)=>setDisplay((event as CustomEvent<ReaderPreferences>).detail);window.addEventListener('komayomi:reader-preferences',update);return()=>window.removeEventListener('komayomi:reader-preferences',update)},[])
   useEffect(()=>{for(const index of [pageIndex-1,pageIndex+1]){const source=data.pages[index]?.image_url;if(source){const image=new Image();image.src=source}}},[data.pages,pageIndex])
   useEffect(()=>{const change=()=>setFullscreen(Boolean(document.fullscreenElement));document.addEventListener('fullscreenchange',change);return()=>document.removeEventListener('fullscreenchange',change)},[])
@@ -142,13 +145,13 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   function move(delta: number) {
     if(!closeEditor())return
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
-    setPageIndex(next);setSearchMatch(null); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next);setSearchMatch(null); setLens(false);setMeaningCheck(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
   function goToPage(next: number,block?:number) {
     if(!closeEditor())return
-    setPageIndex(next);setSearchMatch(block===undefined?null:{page:next,block}); setLens(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next);setSearchMatch(block===undefined?null:{page:next,block}); setLens(false);setMeaningCheck(false); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
@@ -157,7 +160,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     if(!closeEditor())return
     setLookup({text: selectionAction.text, ruby: selectionAction.ruby, context: selectionAction.context, block: selectionAction.block})
     recentLookups.add({text:selectionAction.text,context:selectionAction.context,page:pageIndex,createdAt:new Date().toISOString()})
-    setLens(false); setNavigator(false); setSettings(false); setSelectionAction(null)
+    setLens(false);setMeaningCheck(false); setNavigator(false); setSettings(false); setSelectionAction(null)
   }
 
   function closeEditor() {
@@ -273,7 +276,8 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { if(!closeEditor())return;setLayoutMode(!layoutMode); setShowOverlays(true); setLens(false); setNavigator(false); setLookup(null);setLookupHistory(false); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
           <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
           <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
-          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { if(!closeEditor())return;setLens(!lens); setLensSeed(''); setNavigator(false); setSettings(false);setLookupHistory(false) }}><Eye size={18}/><span>Page Lens</span></button>
+          <button className={meaningCheck?'active meaning-tool':'meaning-tool'} title="Check your understanding" onClick={()=>{if(!closeEditor())return;setMeaningCheck(!meaningCheck);setLens(false);setNavigator(false);setSettings(false);setLookupHistory(false);setLookup(null)}}><CheckCircle2 size={18}/><span>Meaning Check</span></button>
+          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { if(!closeEditor())return;setLens(!lens);setMeaningCheck(false); setLensSeed(''); setNavigator(false); setSettings(false);setLookupHistory(false) }}><Eye size={18}/><span>Page Lens</span></button>
           <button className={navigator?'active':''} title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(!navigator);setLens(false);setLookup(null);setSettings(false);setLookupHistory(false)}}><Grid3X3 size={18}/></button>
           <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
           <button className={lookupHistory?'active':''} title="Recent lookups" onClick={()=>{if(!closeEditor())return;setLookupHistory(!lookupHistory);setSettings(false);setLens(false);setNavigator(false);setLookup(null)}}><Clock3 size={18}/></button>
@@ -283,7 +287,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         </div>
       </header>
 
-      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || lookup || settings || navigator || lookupHistory) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
+      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || meaningCheck || lookup || settings || navigator || lookupHistory) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
         {layoutMode && <div className="layout-mode-banner"><Move size={15}/><div><strong>Layout edit</strong><span>Drag a region to move it · pull its corner to resize · changes save on release</span></div><button onClick={undoLayout} disabled={!layoutHistory.length}><Undo2 size={13}/> Undo</button><button onClick={() => setLayoutMode(false)}>Done</button></div>}
         {page.ocr_quality?.suspicious && !page.ocr_quality.reviewed && (
           <div className="ocr-warning">
@@ -313,6 +317,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         onClose={() => setLens(false)}
         onPageApplied={() => { api.reader(data.volume_id).then(setData).catch(() => undefined) }}
       />}
+      {meaningCheck&&<MeaningCheck volumeId={data.volume_id} pageIndex={pageIndex} page={page} onClose={()=>setMeaningCheck(false)}/>}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {navigator && <PageNavigator volumeId={data.volume_id} pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}
       {lookupHistory&&<LookupHistoryPanel items={recentLookups.items} onChoose={reopenLookup} onClose={()=>setLookupHistory(false)} onClear={recentLookups.clear}/>}

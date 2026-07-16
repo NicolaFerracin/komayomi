@@ -1,4 +1,4 @@
-import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume, VolumeSearchHit } from './types'
+import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, MeaningCheckResult, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume, VolumeSearchHit } from './types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options)
@@ -70,6 +70,7 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider: provider || null, include_next, question: question || null }),
   }),
+  meaningCheck:(id:string,page:number,answers:Array<{block_index:number;interpretation:string}>,include_artwork=false,question?:string,provider?:string)=>request<MeaningCheckResult>(`/api/volumes/${id}/pages/${page}/meaning-check`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers,include_artwork,question:question||null,provider:provider||null})}),
   aiHistory: (id:string,page:number)=>request<AiHistoryItem[]>(`/api/volumes/${id}/pages/${page}/ai-history`, {cache:'no-store'}),
   deleteAiHistory: (id:string,page:number,kind:AiHistoryItem['kind'],item:string)=>request<{ok:boolean}>(`/api/volumes/${id}/pages/${page}/ai-history/${kind}/${item}`, {method:'DELETE'}),
   saveItem: (item: {text: string; reading?: string; meaning?: string; volume_id?: string; page_index?: number; context?: string; notes?: string;kind?:SavedItem['kind']}) =>

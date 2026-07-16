@@ -12,6 +12,8 @@ The Vite/React client is a local reader UI. FastAPI owns persistence, dictionary
 
 Approved OCR edits layer over immutable Mokuro metadata. Search is rebuilt lazily after transcript changes. Focused AI history is attached to volume/page/block identity so correcting the transcript does not orphan it.
 
+Meaning Check batches all answered regions on a page into one structured provider request. Unanswered translations remain hidden; the server grounds comparison with canonical text, printed ruby, local tokens, and grammar matches. Identical attempts are cached, incomplete model responses are rejected, and successful reports are retained in Page Lens history.
+
 ## Release check
 
 Run `npm test`, `npm run build`, Python bytecode compilation, `PRAGMA integrity_check`, and a clean health-check startup. Never commit `.env`, manga pages, the SQLite database, or generated OCR output.

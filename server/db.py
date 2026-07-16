@@ -12,7 +12,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -68,9 +68,10 @@ def _migration_5(db: sqlite3.Connection) -> None:
     _column(db, "volumes", "content_fingerprint", "TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS volume_content_fingerprint ON volumes(content_fingerprint)")
 def _migration_6(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS processing_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,volume_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+def _migration_7(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS meaning_checks (id TEXT PRIMARY KEY,volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,cache_key TEXT NOT NULL,input_json TEXT NOT NULL,result_json TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL)")
 
 
-MIGRATIONS = {2:_migration_2, 3:_migration_3, 4:_migration_4, 5:_migration_5, 6:_migration_6}
+MIGRATIONS = {2:_migration_2, 3:_migration_3, 4:_migration_4, 5:_migration_5, 6:_migration_6, 7:_migration_7}
 
 
 def _migrate(db: sqlite3.Connection) -> None:
@@ -166,6 +167,11 @@ def initialize() -> None:
             CREATE TABLE IF NOT EXISTS processing_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, volume_id TEXT NOT NULL,
                 message TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS meaning_checks (
+                id TEXT PRIMARY KEY, volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
+                cache_key TEXT NOT NULL, input_json TEXT NOT NULL, result_json TEXT NOT NULL,
+                provider TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL
             );
             """
         )
@@ -410,6 +416,24 @@ def processing_log(volume_id: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def get_meaning_check(volume_id: str, page_index: int, cache_key: str) -> dict | None:
+    with connection() as conn:
+        row = conn.execute("SELECT * FROM meaning_checks WHERE volume_id=? AND page_index=? AND cache_key=? ORDER BY created_at DESC LIMIT 1", (volume_id,page_index,cache_key)).fetchone()
+    if not row: return None
+    return {**dict(row),"input":json.loads(row["input_json"]),"result":json.loads(row["result_json"])}
+
+
+def save_meaning_check(item: dict) -> None:
+    with connection() as conn:
+        conn.execute("INSERT INTO meaning_checks VALUES (?,?,?,?,?,?,?,?,?)", (item["id"],item["volume_id"],item["page_index"],item["cache_key"],json.dumps(item["input"],ensure_ascii=False),json.dumps(item["result"],ensure_ascii=False),item["provider"],item["model"],item["created_at"]))
+
+
+def meaning_check_history(volume_id: str, page_index: int) -> list[dict]:
+    with connection() as conn:
+        rows=conn.execute("SELECT * FROM meaning_checks WHERE volume_id=? AND page_index=? ORDER BY created_at DESC",(volume_id,page_index)).fetchall()
+    return [{**dict(row),"input":json.loads(row["input_json"]),"result":json.loads(row["result_json"])} for row in rows]
+
+
 def save_grammar_explanation(item: dict) -> None:
     with connection() as conn:
         conn.execute("INSERT INTO grammar_explanations (id,sentence,focus,question,provider,model,result_json,created_at,volume_id,page_index,block_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -453,6 +477,8 @@ def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str, 
             placeholders = ",".join("?" for _ in sentences)
             legacy = f" OR (volume_id IS NULL AND sentence IN ({placeholders}))" if sentences else ""
             cursor = conn.execute(f"DELETE FROM grammar_explanations WHERE id=? AND ((volume_id=? AND page_index=?){legacy})", [item_id, volume_id, page_index, *sentences])
-        else:
+        elif kind == "page":
             cursor = conn.execute("DELETE FROM lens_analyses WHERE volume_id=? AND page_index=? AND cache_key=?", (volume_id, page_index, item_id))
+        else:
+            cursor=conn.execute("DELETE FROM meaning_checks WHERE id=? AND volume_id=? AND page_index=?",(item_id,volume_id,page_index))
     return cursor.rowcount > 0

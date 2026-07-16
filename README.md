@@ -33,6 +33,7 @@ npm run dev
 - Reprocess a cropped text region with OpenAI, Anthropic, or Gemini vision, review the proposal, then explicitly save it
 - Repair an entire page's OCR layout with vision and approve replacement regions before they are persisted
 - Run opt-in Page Lens analysis with previous-page context, an optional next-page spoiler toggle, questions, and a local cache
+- Check your own interpretation of multiple bubbles in one page-level Meaning Check, with separate meaning and literal-alignment feedback
 - Save dictionary finds to a no-pressure study inbox and export Anki-compatible TSV
 - Search Japanese text or kana readings across a volume using a persistent correction-aware index
 - Bookmark pages, keep recent lookups, flag OCR issues, and edit text-region placement
@@ -41,6 +42,7 @@ npm run dev
 - Back up and safely restore the SQLite database from the Library
 
 Page Lens never sends page data anywhere until the user explicitly invokes it.
+Meaning Check is also opt-in: it sends only answered blocks and text context by default, with page artwork behind a separate toggle.
 
 ## Optional LLM providers
 

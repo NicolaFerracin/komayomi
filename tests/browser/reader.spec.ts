@@ -17,6 +17,7 @@ test.beforeEach(async ({page}) => {
       {id:'sentence',text:'むかしむかし',reading:null,meaning:'Once upon a time',volume_id:'v1',page_index:0,context:null,notes:null,created_at:'2026-01-02',kind:'sentence'},
       {id:'grammar',text:'のこと',reading:null,meaning:'the matter of',volume_id:'v1',page_index:0,context:null,notes:null,created_at:'2026-01-03',kind:'grammar'}]})
     if(url.pathname==='/api/volumes/v1/pages/0/ai-history'&&method==='GET') return route.fulfill({json:[{id:'ai1',kind:'selection',question:'Explain のこと',focus:'のこと',answer:'It frames the matter.',provider:'mock',model:'local-test',created_at:'2026-01-01',details:{breakdown:[{part:'のこと',role:'nominal frame'}]}}]})
+    if(url.pathname==='/api/volumes/v1/pages/0/meaning-check'&&method==='POST') return route.fulfill({json:{id:'check1',provider:'mock',model:'local-test',cached:false,created_at:'2026-01-01',check:{summary:'You understood the story opening.',evaluations:[{block_index:0,meaning_score:95,literal_score:72,verdict:'Meaning correct',literal_translation:'Long ago, long ago',natural_translation:'Once upon a time',contextual_meaning:'A conventional story opening',correct:['You captured the time frame.'],missing:['The repetition gives it a fairy-tale cadence.'],added:[],incorrect:[]}]}}})
     if(url.pathname==='/api/restore'&&method==='POST') return route.fulfill({json:{ok:true,volumes:1,recovered_jobs:0,safety_backup:'safety.db'}})
     if(url.pathname==='/api/volumes/v1/search') return route.fulfill({json:url.searchParams.get('q')==='ごくう'?[{page:1,block:0,text:'孫悟空',matched_by:'reading'}]:[]})
     if(url.pathname==='/api/llm/status') return route.fulfill({json:{preferred:'mock',providers:[{id:'mock',name:'Mock',model:'local-test',configured:true}]}})
@@ -139,4 +140,16 @@ test('restores a database backup through the guarded library UI', async ({page})
   await page.locator('.restore-button input').setInputFiles({name:'backup.db',mimeType:'application/vnd.sqlite3',buffer:Buffer.from('sqlite')})
   await restored
   await expect(page.getByRole('button',{name:/Study inbox/})).toBeVisible()
+})
+
+test('batches page comprehension answers into one Meaning Check',async({page})=>{
+  await page.getByTitle('Check your understanding').click()
+  await expect(page.getByRole('heading',{name:'Meaning Check'})).toBeVisible()
+  await page.getByPlaceholder('What do you think this means?').first().fill('Once upon a time')
+  const request=page.waitForRequest((request)=>request.url().endsWith('/meaning-check')&&request.method()==='POST')
+  await page.getByRole('button',{name:/Check 1 bubble/}).click()
+  expect((await request).postDataJSON()).toMatchObject({answers:[{block_index:0,interpretation:'Once upon a time'}],include_artwork:false})
+  await expect(page.getByText('You understood the story opening.')).toBeVisible()
+  await expect(page.getByText('Meaning captured')).toBeVisible()
+  await expect(page.getByText('Once upon a time',{exact:true})).toBeVisible()
 })

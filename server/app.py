@@ -123,6 +123,18 @@ class GrammarExplain(BaseModel):
     block_index: int | None = None
 
 
+class MeaningAnswer(BaseModel):
+    block_index: int
+    interpretation: str
+
+
+class MeaningCheckRequest(BaseModel):
+    answers: list[MeaningAnswer]
+    include_artwork: bool = False
+    question: str | None = None
+    provider: str | None = None
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -582,6 +594,19 @@ LENS_SCHEMA = {
         }, "required": ["type", "title", "explanation", "evidence", "confidence"]}},
     }, "required": ["summary", "notes"],
 }
+MEANING_CHECK_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "summary": {"type": "string"},
+        "evaluations": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {
+            "block_index": {"type": "integer"}, "meaning_score": {"type": "number"}, "literal_score": {"type": "number"},
+            "verdict": {"type": "string"}, "literal_translation": {"type": "string"}, "natural_translation": {"type": "string"},
+            "contextual_meaning": {"type": "string"}, "correct": {"type": "array", "items": {"type": "string"}},
+            "missing": {"type": "array", "items": {"type": "string"}}, "added": {"type": "array", "items": {"type": "string"}},
+            "incorrect": {"type": "array", "items": {"type": "string"}},
+        }, "required": ["block_index","meaning_score","literal_score","verdict","literal_translation","natural_translation","contextual_meaning","correct","missing","added","incorrect"]}},
+    }, "required": ["summary","evaluations"],
+}
 PAGE_VISION_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {
@@ -688,6 +713,46 @@ def repair_contents_layout(blocks: list[dict], width: int, height: int) -> list[
     return blocks
 
 
+@app.post("/api/volumes/{volume_id}/pages/{page_index}/meaning-check")
+async def meaning_check(volume_id: str, page_index: int, request: MeaningCheckRequest):
+    volume=require_volume(volume_id); payload=reader_payload(volume); apply_saved_text(payload,volume_id)
+    if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404,"Page not found")
+    page=payload["pages"][page_index]; blocks=page.get("blocks",[])
+    answer_map={}
+    for answer in request.answers:
+        interpretation=answer.interpretation.strip()
+        if interpretation and 0 <= answer.block_index < len(blocks):
+            block=blocks[answer.block_index];japanese="".join(block.get("lines",[]))
+            answer_map[answer.block_index]={"block_index":answer.block_index,"japanese":japanese,"printed_ruby":[span for line in block.get("ruby",[]) for span in line if span.get("printed")],"local_tokens":[{"surface":token.get("surface"),"lemma":token.get("lemma"),"reading":token.get("reading"),"part_of_speech":token.get("part_of_speech")} for token in tokenize(japanese)],"local_grammar":analyze_grammar(japanese,None).get("matches",[]),"interpretation":interpretation}
+    answers=list(answer_map.values())
+    if not answers: raise HTTPException(400,"Write your understanding for at least one text block")
+    if len(answers)>50: raise HTTPException(400,"A single check can contain at most 50 answers")
+    page_context=[{"block_index":index,"japanese":"".join(block.get("lines",[])),"box":block.get("box"),"vertical":bool(block.get("vertical"))} for index,block in enumerate(blocks)]
+    prompt="""You are a careful Japanese manga comprehension evaluator. Compare the reader's interpretation with the Japanese, using the other page blocks only as context. Do not penalize natural rewording. Judge meaning accuracy separately from literal structural alignment. Scores are 0-100. List only concrete points under correct, missing, added, and incorrect; use empty arrays where appropriate. A missing nuance is not automatically an error. Literal translation should expose Japanese structure while remaining readable; natural translation should sound idiomatic. Never infer kanji that were written in kana. Return one evaluation for every answered block, using exactly its block_index.\n\n"""
+    prompt += "PAGE BLOCKS:\n"+json.dumps(page_context,ensure_ascii=False)+"\n\nREADER ANSWERS:\n"+json.dumps(answers,ensure_ascii=False)
+    if request.question: prompt += "\n\nREADER REQUEST:\n"+request.question.strip()
+    cache_key=hashlib.sha256(((request.provider or "default")+str(request.include_artwork)+prompt).encode()).hexdigest()
+    cached=db.get_meaning_check(volume_id,page_index,cache_key)
+    if cached: return {"id":cached["id"],"check":cached["result"],"provider":cached["provider"],"model":cached["model"],"cached":True,"created_at":cached["created_at"]}
+    try:
+        if request.include_artwork:
+            image_bytes,mime=page_image(volume,page);result,provider=await structured_vision(request.provider,prompt,image_bytes,mime,MEANING_CHECK_SCHEMA)
+        else: result,provider=await structured_text(request.provider,prompt,MEANING_CHECK_SCHEMA)
+    except (ValueError,httpx.HTTPError,json.JSONDecodeError) as error: raise HTTPException(503,str(error))
+    answered={item["block_index"] for item in answers};evaluations=[]
+    for evaluation in result.get("evaluations",[]):
+        if evaluation.get("block_index") not in answered: continue
+        evaluation["meaning_score"]=max(0,min(100,float(evaluation.get("meaning_score",0))))
+        evaluation["literal_score"]=max(0,min(100,float(evaluation.get("literal_score",0))))
+        evaluations.append(evaluation)
+    if {item.get("block_index") for item in evaluations} != answered:
+        raise HTTPException(503,"The AI returned incomplete feedback. Nothing was saved; please retry.")
+    result["evaluations"]=evaluations
+    item={"id":uuid.uuid4().hex,"volume_id":volume_id,"page_index":page_index,"cache_key":cache_key,"input":{"answers":answers,"include_artwork":request.include_artwork,"question":request.question},"result":result,"provider":provider.id,"model":provider.model,"created_at":now()}
+    db.save_meaning_check(item)
+    return {"id":item["id"],"check":result,"provider":provider.id,"model":provider.model,"cached":False,"created_at":item["created_at"]}
+
+
 def normalize_contents_proposal(blocks: list[dict]) -> list[dict]:
     """Split LLM proposals that collapse an entire TOC into one region.
 
@@ -765,6 +830,9 @@ def ai_history(volume_id: str, page_index: int, response: Response):
         items.append({"id": saved["id"], "kind": "page", "question": saved.get("question") or "Analyze this page",
                       "focus": None, "answer": analysis.get("summary", ""), "provider": saved.get("provider", ""),
                       "model": saved.get("model", ""), "created_at": saved["created_at"], "details": analysis})
+    for saved in db.meaning_check_history(volume_id,page_index):
+        result=saved["result"]; answered=len(saved["input"].get("answers",[]))
+        items.append({"id":saved["id"],"kind":"comprehension","question":f"Meaning Check · {answered} block{'s' if answered!=1 else ''}","focus":None,"answer":result.get("summary",""),"provider":saved["provider"],"model":saved["model"],"created_at":saved["created_at"],"details":{**result,"answers":saved["input"].get("answers",[])}})
     return sorted(items, key=lambda item: item["created_at"], reverse=True)
 
 
@@ -772,7 +840,7 @@ def ai_history(volume_id: str, page_index: int, response: Response):
 def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str):
     volume = require_volume(volume_id); payload = reader_payload(volume); apply_saved_text(payload, volume_id)
     if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404, "Page not found")
-    if kind not in {"selection", "page"}: raise HTTPException(400, "Unknown history type")
+    if kind not in {"selection", "page", "comprehension"}: raise HTTPException(400, "Unknown history type")
     sentences = ["".join(block.get("lines", [])) for block in payload["pages"][page_index].get("blocks", [])]
     if not db.delete_ai_history(volume_id, page_index, kind, item_id, sentences): raise HTTPException(404, "Saved query not found")
     return {"ok": True}
