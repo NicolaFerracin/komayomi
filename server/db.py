@@ -12,7 +12,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -69,9 +69,10 @@ def _migration_5(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS volume_content_fingerprint ON volumes(content_fingerprint)")
 def _migration_6(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS processing_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,volume_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 def _migration_7(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS meaning_checks (id TEXT PRIMARY KEY,volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,cache_key TEXT NOT NULL,input_json TEXT NOT NULL,result_json TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL)")
+def _migration_8(db: sqlite3.Connection) -> None: db.executescript("""CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY,kind TEXT NOT NULL,form TEXT NOT NULL,reading TEXT,meaning TEXT NOT NULL,explanation TEXT NOT NULL,example_japanese TEXT NOT NULL,example_english TEXT NOT NULL,source_volume_id TEXT NOT NULL,source_page_index INTEGER NOT NULL,source_block_index INTEGER,status TEXT NOT NULL DEFAULT 'learning',encounters INTEGER NOT NULL DEFAULT 1,successful_recalls INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);CREATE UNIQUE INDEX IF NOT EXISTS lesson_identity ON lessons(kind,form);CREATE TABLE IF NOT EXISTS lesson_dismissals (volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,proposal_key TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(volume_id,page_index,proposal_key));CREATE TABLE IF NOT EXISTS assistance_events (id TEXT PRIMARY KEY,volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,block_index INTEGER,event_type TEXT NOT NULL,lesson_id TEXT,created_at TEXT NOT NULL);""")
 
 
-MIGRATIONS = {2:_migration_2, 3:_migration_3, 4:_migration_4, 5:_migration_5, 6:_migration_6, 7:_migration_7}
+MIGRATIONS = {2:_migration_2, 3:_migration_3, 4:_migration_4, 5:_migration_5, 6:_migration_6, 7:_migration_7, 8:_migration_8}
 
 
 def _migrate(db: sqlite3.Connection) -> None:
@@ -173,6 +174,10 @@ def initialize() -> None:
                 cache_key TEXT NOT NULL, input_json TEXT NOT NULL, result_json TEXT NOT NULL,
                 provider TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY,kind TEXT NOT NULL,form TEXT NOT NULL,reading TEXT,meaning TEXT NOT NULL,explanation TEXT NOT NULL,example_japanese TEXT NOT NULL,example_english TEXT NOT NULL,source_volume_id TEXT NOT NULL,source_page_index INTEGER NOT NULL,source_block_index INTEGER,status TEXT NOT NULL DEFAULT 'learning',encounters INTEGER NOT NULL DEFAULT 1,successful_recalls INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+            CREATE UNIQUE INDEX IF NOT EXISTS lesson_identity ON lessons(kind,form);
+            CREATE TABLE IF NOT EXISTS lesson_dismissals (volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,proposal_key TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(volume_id,page_index,proposal_key));
+            CREATE TABLE IF NOT EXISTS assistance_events (id TEXT PRIMARY KEY,volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,block_index INTEGER,event_type TEXT NOT NULL,lesson_id TEXT,created_at TEXT NOT NULL);
             """
         )
         _migrate(db)
@@ -482,3 +487,52 @@ def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str, 
         else:
             cursor=conn.execute("DELETE FROM meaning_checks WHERE id=? AND volume_id=? AND page_index=?",(item_id,volume_id,page_index))
     return cursor.rowcount > 0
+
+
+def save_lesson(item: dict) -> dict:
+    with connection() as conn:
+        existing=conn.execute("SELECT * FROM lessons WHERE kind=? AND form=?",(item["kind"],item["form"])).fetchone()
+        if existing: return dict(existing)
+        conn.execute("INSERT INTO lessons VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(item["id"],item["kind"],item["form"],item.get("reading"),item["meaning"],item["explanation"],item["example_japanese"],item["example_english"],item["source_volume_id"],item["source_page_index"],item.get("source_block_index"),"learning",1,0,item["created_at"],item["created_at"]))
+        return dict(conn.execute("SELECT * FROM lessons WHERE id=?",(item["id"],)).fetchone())
+
+
+def lessons() -> list[dict]:
+    with connection() as conn: rows=conn.execute("SELECT * FROM lessons ORDER BY updated_at DESC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def lesson_matches(texts: list[str]) -> list[dict]:
+    return [{**lesson,"block_indices":[index for index,text in enumerate(texts) if lesson["form"] in text]} for lesson in lessons() if any(lesson["form"] in text for text in texts)]
+
+
+def record_lesson_recall(lesson_id: str, success: bool, updated_at: str) -> dict | None:
+    with connection() as conn:
+        row=conn.execute("SELECT * FROM lessons WHERE id=?",(lesson_id,)).fetchone()
+        if not row:return None
+        recalls=row["successful_recalls"]+int(success);encounters=row["encounters"]+1
+        status="familiar" if recalls>=3 else "recognized" if recalls>=1 else "learning"
+        conn.execute("UPDATE lessons SET encounters=?,successful_recalls=?,status=?,updated_at=? WHERE id=?",(encounters,recalls,status,updated_at,lesson_id))
+        return dict(conn.execute("SELECT * FROM lessons WHERE id=?",(lesson_id,)).fetchone())
+
+
+def dismiss_lesson(volume_id: str,page_index: int,proposal_key: str,created_at: str) -> None:
+    with connection() as conn: conn.execute("INSERT OR IGNORE INTO lesson_dismissals VALUES (?,?,?,?)",(volume_id,page_index,proposal_key,created_at))
+
+
+def dismissed_lessons(volume_id: str,page_index: int) -> set[str]:
+    with connection() as conn: rows=conn.execute("SELECT proposal_key FROM lesson_dismissals WHERE volume_id=? AND page_index=?",(volume_id,page_index)).fetchall()
+    return {row[0] for row in rows}
+
+
+def record_assistance(item: dict) -> None:
+    with connection() as conn: conn.execute("INSERT INTO assistance_events VALUES (?,?,?,?,?,?,?)",(item["id"],item["volume_id"],item["page_index"],item.get("block_index"),item["event_type"],item.get("lesson_id"),item["created_at"]))
+
+
+def learning_progress(volume_id: str | None=None) -> dict:
+    where=" WHERE volume_id=?" if volume_id else "";params=(volume_id,) if volume_id else ()
+    with connection() as conn:
+        rows=conn.execute(f"SELECT event_type,COUNT(*) count FROM assistance_events{where} GROUP BY event_type",params).fetchall()
+        lesson_rows=conn.execute("SELECT status,COUNT(*) count FROM lessons GROUP BY status").fetchall()
+    events={row["event_type"]:row["count"] for row in rows};total=sum(events.values());independent=events.get("recall_success",0)+events.get("comprehension_success",0)
+    return {"events":events,"total_events":total,"independent_rate":round(independent/total*100) if total else 0,"lessons":{row["status"]:row["count"] for row in lesson_rows}}

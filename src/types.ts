@@ -88,3 +88,7 @@ export type MeaningEvaluation={block_index:number;meaning_score:number;literal_s
 export type MeaningCheckResult={id:string;check:{summary:string;evaluations:MeaningEvaluation[]};provider:string;model:string;cached:boolean;created_at:string}
 export type AiHistoryItem = {id:string;kind:'selection'|'page'|'comprehension';question:string;focus:string|null;answer:string;provider:string;model:string;created_at:string;details?:{interpretation?:string;breakdown?:Array<{part:string;role:string}>;uncertainty?:string;summary?:string;notes?:Array<{type:string;title:string;explanation:string;evidence:string;confidence:number}>;evaluations?:MeaningEvaluation[];answers?:Array<{block_index:number;japanese:string;interpretation:string}>}}
 export type VolumeSearchHit={page:number;block:number;text:string;matched_by:'text'|'reading'}
+export type LessonProposal={proposal_key:string;kind:'vocabulary'|'grammar'|'pattern'|'reading'|'register';form:string;reading:string|null;meaning:string;explanation:string;example_japanese:string;example_english:string;source_block_index:number;why_now?:string}
+export type Lesson=Omit<LessonProposal,'proposal_key'|'why_now'>&{id:string;source_volume_id:string;source_page_index:number;status:'learning'|'recognized'|'familiar';encounters:number;successful_recalls:number;block_indices?:number[]}
+export type LearningPassResult={summary:string;proposals:LessonProposal[];provider:string;model:string}
+export type LearningProgress={events:Record<string,number>;total_events:number;independent_rate:number;lessons:Record<string,number>}

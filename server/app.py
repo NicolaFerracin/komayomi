@@ -135,6 +135,28 @@ class MeaningCheckRequest(BaseModel):
     provider: str | None = None
 
 
+class LessonProposal(BaseModel):
+    proposal_key: str | None = None
+    kind: str
+    form: str
+    reading: str | None = None
+    meaning: str
+    explanation: str
+    example_japanese: str
+    example_english: str
+    source_block_index: int | None = None
+
+
+class RecallResult(BaseModel):
+    success: bool
+
+
+class AssistanceEvent(BaseModel):
+    event_type: str
+    block_index: int | None = None
+    lesson_id: str | None = None
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -608,6 +630,7 @@ MEANING_CHECK_SCHEMA = {
         }, "required": ["block_index","literal_score","verdict","literal_translation","natural_translation","contextual_meaning","correct","missing","added","incorrect","coverage"]}},
     }, "required": ["summary","evaluations"],
 }
+LEARNING_PASS_SCHEMA={"type":"object","additionalProperties":False,"properties":{"summary":{"type":"string"},"proposals":{"type":"array","items":{"type":"object","additionalProperties":False,"properties":{"kind":{"type":"string"},"form":{"type":"string"},"reading":{"type":"string"},"meaning":{"type":"string"},"explanation":{"type":"string"},"example_japanese":{"type":"string"},"example_english":{"type":"string"},"source_block_index":{"type":"integer"},"why_now":{"type":"string"}},"required":["kind","form","reading","meaning","explanation","example_japanese","example_english","source_block_index","why_now"]}}},"required":["summary","proposals"]}
 PAGE_VISION_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {
@@ -870,6 +893,69 @@ def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str):
 @app.get("/api/saved-items")
 def list_saved_items():
     return db.saved_items()
+
+
+@app.post("/api/volumes/{volume_id}/pages/{page_index}/learning-pass")
+async def learning_pass(volume_id:str,page_index:int,request:VisionRequest):
+    volume=require_volume(volume_id);payload=reader_payload(volume);apply_saved_text(payload,volume_id)
+    if not 0<=page_index<len(payload["pages"]):raise HTTPException(404,"Page not found")
+    page=payload["pages"][page_index];blocks=[{"block_index":index,"japanese":"".join(block.get("lines",[])),"printed_ruby":[span for line in block.get("ruby",[]) for span in line if span.get("printed")]} for index,block in enumerate(page.get("blocks",[]))]
+    saved=[item for item in db.saved_items() if item.get("volume_id")==volume_id and item.get("page_index")==page_index]
+    checks=db.meaning_check_history(volume_id,page_index);latest_check=checks[0]["result"] if checks else None
+    known=[{"kind":item["kind"],"form":item["form"],"meaning":item["meaning"]} for item in db.lessons()]
+    prompt="""You are designing a tiny learning pass after a Japanese manga page. Return at most 3 reusable lessons that will make future pages easier. Prefer, in order: actual Meaning Check omissions/errors, repeated or saved lookups, transferable high-frequency vocabulary/grammar/patterns, and kanji readings inside useful words. Never propose isolated kanji, proper names, one-off sound effects, trivia, or a full-sentence translation. A grammar or pattern form must be a Japanese substring that can be detected again. Keep explanations and examples concise and entirely in English except Japanese examples. source_block_index must identify the source. If nothing is worth retaining, return zero proposals.\n\n"""+json.dumps({"page_blocks":blocks,"saved_on_page":saved,"latest_meaning_check":latest_check,"already_known":known},ensure_ascii=False)
+    try:result,provider=await structured_text(request.provider,prompt,LEARNING_PASS_SCHEMA)
+    except (ValueError,httpx.HTTPError,json.JSONDecodeError) as error:raise HTTPException(503,str(error))
+    dismissed=db.dismissed_lessons(volume_id,page_index);existing={(item["kind"],item["form"]) for item in db.lessons()};proposals=[]
+    for proposal in result.get("proposals",[])[:3]:
+        kind=str(proposal.get("kind","")).lower();form=str(proposal.get("form","")).strip();block_index=proposal.get("source_block_index")
+        if kind not in {"vocabulary","grammar","pattern","reading","register"} or not form or not isinstance(block_index,int) or not 0<=block_index<len(blocks):continue
+        key=hashlib.sha256(f"{kind}:{form}".encode()).hexdigest()[:16]
+        if key in dismissed or (kind,form) in existing:continue
+        proposals.append({**proposal,"kind":kind,"form":form,"proposal_key":key})
+    return {"summary":result.get("summary",""),"proposals":proposals,"provider":provider.id,"model":provider.model}
+
+
+@app.get("/api/lessons")
+def lessons():return db.lessons()
+
+
+@app.get("/api/volumes/{volume_id}/pages/{page_index}/lesson-matches")
+def lesson_matches(volume_id:str,page_index:int):
+    volume=require_volume(volume_id);payload=reader_payload(volume);apply_saved_text(payload,volume_id)
+    if not 0<=page_index<len(payload["pages"]):raise HTTPException(404,"Page not found")
+    return db.lesson_matches(["".join(block.get("lines",[])) for block in payload["pages"][page_index].get("blocks",[])])
+
+
+@app.post("/api/volumes/{volume_id}/pages/{page_index}/lessons")
+def keep_lesson(volume_id:str,page_index:int,payload:LessonProposal):
+    require_volume(volume_id)
+    if payload.kind not in {"vocabulary","grammar","pattern","reading","register"} or not payload.form.strip():raise HTTPException(400,"Invalid lesson")
+    item={**payload.model_dump(),"id":uuid.uuid4().hex,"form":payload.form.strip(),"source_volume_id":volume_id,"source_page_index":page_index,"created_at":now()}
+    return db.save_lesson(item)
+
+
+@app.post("/api/volumes/{volume_id}/pages/{page_index}/lesson-dismissals/{proposal_key}")
+def dismiss_lesson(volume_id:str,page_index:int,proposal_key:str):
+    require_volume(volume_id);db.dismiss_lesson(volume_id,page_index,proposal_key,now());return {"ok":True}
+
+
+@app.post("/api/lessons/{lesson_id}/recall")
+def recall_lesson(lesson_id:str,payload:RecallResult):
+    result=db.record_lesson_recall(lesson_id,payload.success,now())
+    if not result:raise HTTPException(404,"Lesson not found")
+    return result
+
+
+@app.post("/api/volumes/{volume_id}/pages/{page_index}/assistance")
+def assistance(volume_id:str,page_index:int,payload:AssistanceEvent):
+    require_volume(volume_id)
+    if payload.event_type not in {"lookup","ai_explanation","recall_success","recall_reveal","comprehension_success","comprehension_gap"}:raise HTTPException(400,"Unknown assistance type")
+    db.record_assistance({"id":uuid.uuid4().hex,"volume_id":volume_id,"page_index":page_index,"block_index":payload.block_index,"event_type":payload.event_type,"lesson_id":payload.lesson_id,"created_at":now()});return {"ok":True}
+
+
+@app.get("/api/learning-progress")
+def learning_progress(volume_id:str|None=None):return db.learning_progress(volume_id)
 
 
 @app.post("/api/saved-items")

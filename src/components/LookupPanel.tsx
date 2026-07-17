@@ -19,7 +19,7 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], volumeId,
     return () => { active = false }
   }, [query, sentence])
   useEffect(()=>{api.llmStatus().then((status)=>{setLlmStatus(status);setProvider(preferredProvider(status))}).catch(()=>undefined)},[])
-  async function explain(){setExplaining(true);setError('');try{setExplanation(await api.explainGrammar(sentence,query,provider,aiRequest,{volume_id:volumeId,page_index:pageIndex,block_index:blockIndex}))}catch(reason){setError(reason instanceof Error?reason.message:'Could not explain this usage')}finally{setExplaining(false)}}
+  async function explain(){setExplaining(true);setError('');try{setExplanation(await api.explainGrammar(sentence,query,provider,aiRequest,{volume_id:volumeId,page_index:pageIndex,block_index:blockIndex}));api.assistance(volumeId,pageIndex,'ai_explanation',blockIndex).catch(()=>undefined)}catch(reason){setError(reason instanceof Error?reason.message:'Could not explain this usage')}finally{setExplaining(false)}}
 
   return (
     <aside className="tool-panel lookup-panel">

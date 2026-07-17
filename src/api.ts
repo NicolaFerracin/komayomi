@@ -1,4 +1,4 @@
-import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LensAnalysis, LlmStatus, MeaningCheckResult, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume, VolumeSearchHit } from './types'
+import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LearningPassResult, LearningProgress, LensAnalysis, Lesson, LessonProposal, LlmStatus, MeaningCheckResult, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume, VolumeSearchHit } from './types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options)
@@ -71,6 +71,14 @@ export const api = {
     body: JSON.stringify({ provider: provider || null, include_next, question: question || null }),
   }),
   meaningCheck:(id:string,page:number,answers:Array<{block_index:number;interpretation:string}>,include_artwork=false,question?:string,provider?:string)=>request<MeaningCheckResult>(`/api/volumes/${id}/pages/${page}/meaning-check`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers,include_artwork,question:question||null,provider:provider||null})}),
+  learningPass:(id:string,page:number,provider?:string)=>request<LearningPassResult>(`/api/volumes/${id}/pages/${page}/learning-pass`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:provider||null})}),
+  lessonMatches:(id:string,page:number)=>request<Lesson[]>(`/api/volumes/${id}/pages/${page}/lesson-matches`,{cache:'no-store'}),
+  lessons:()=>request<Lesson[]>('/api/lessons',{cache:'no-store'}),
+  keepLesson:(id:string,page:number,lesson:LessonProposal)=>request<Lesson>(`/api/volumes/${id}/pages/${page}/lessons`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lesson)}),
+  dismissLesson:(id:string,page:number,key:string)=>request<{ok:boolean}>(`/api/volumes/${id}/pages/${page}/lesson-dismissals/${key}`,{method:'POST'}),
+  recallLesson:(id:string,success:boolean)=>request<Lesson>(`/api/lessons/${id}/recall`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({success})}),
+  assistance:(id:string,page:number,event_type:string,block_index?:number,lesson_id?:string)=>request<{ok:boolean}>(`/api/volumes/${id}/pages/${page}/assistance`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_type,block_index,lesson_id})}),
+  learningProgress:(id?:string)=>request<LearningProgress>(`/api/learning-progress${id?`?volume_id=${id}`:''}`,{cache:'no-store'}),
   aiHistory: (id:string,page:number)=>request<AiHistoryItem[]>(`/api/volumes/${id}/pages/${page}/ai-history`, {cache:'no-store'}),
   deleteAiHistory: (id:string,page:number,kind:AiHistoryItem['kind'],item:string)=>request<{ok:boolean}>(`/api/volumes/${id}/pages/${page}/ai-history/${kind}/${item}`, {method:'DELETE'}),
   saveItem: (item: {text: string; reading?: string; meaning?: string; volume_id?: string; page_index?: number; context?: string; notes?: string;kind?:SavedItem['kind']}) =>
