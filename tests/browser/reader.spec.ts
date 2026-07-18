@@ -115,7 +115,7 @@ test('adds and removes a page bookmark', async ({page}) => {
 })
 
 test('applies and persists reader display settings', async ({page}) => {
-  await page.getByTitle('Reader settings').click()
+  await page.getByTitle('More reader tools').click();await page.getByRole('button',{name:'Reader settings'}).click()
   const size=page.getByRole('slider').first()
   await size.fill('1.5')
   await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('komayomi.readerPreferences')||'{}').overlayScale)).toBe(1.5)
@@ -198,10 +198,18 @@ test('asks for recall before reopening vocabulary for learned language',async({p
 })
 
 test('keeps the preferred learning workflow available inside the reader',async({page})=>{
-  await page.getByTitle('Reading & learning workflow').click()
+  await page.getByTitle('More reader tools').click();await page.getByRole('button',{name:'Reading workflow'}).click()
   await expect(page.getByRole('heading',{name:'Reading workflow'})).toBeVisible()
   await expect(page.getByRole('heading',{name:'Read unaided'})).toBeVisible()
   await expect(page.getByText('No daily quota, streak, due date, or overdue pile.')).toBeVisible()
   await page.keyboard.press('Escape');await expect(page.getByRole('heading',{name:'Reading workflow'})).toHaveCount(0)
   await page.keyboard.press('w');await expect(page.getByRole('heading',{name:'Reading workflow'})).toBeVisible()
+})
+
+test('keeps the primary reader toolbar focused',async({page})=>{
+  await expect(page.locator('.reader-tools>button')).toHaveCount(4)
+  await expect(page.getByTitle('Toggle text overlays')).toHaveCount(0)
+  await page.getByTitle('More reader tools').click()
+  await expect(page.getByRole('button',{name:'Recent lookups'})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Reader settings'})).toBeVisible()
 })

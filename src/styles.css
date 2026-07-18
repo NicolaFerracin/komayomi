@@ -130,6 +130,7 @@ body::before { content: ""; position: fixed; inset: 0; opacity: .22; pointer-eve
 .reader-tools button:hover, .reader-tools button.active { color: white; background: rgba(255,255,255,.08); }
 .reader-tools .layout-tool.active { color: white; background: var(--red); }
 .reader-tools .lens-tool { color: #e4c6a0; border: 1px solid rgba(228,198,160,.25); }
+.reader-tools .lens-tool--compact{width:38px;padding:0}.reader-tools-overflow{position:relative}.reader-tools-menu{position:absolute;z-index:20;right:0;top:44px;width:250px;padding:7px;color:var(--ink);background:var(--paper);border:1px solid var(--line);box-shadow:0 16px 48px #0008}.reader-tools .reader-tools-menu>button{width:100%;height:42px;padding:0 11px;justify-content:flex-start;color:var(--ink);background:transparent}.reader-tools .reader-tools-menu>button:hover{color:var(--red);background:var(--paper-deep)}.reader-tools .reader-tools-menu>button span{color:inherit;font:10px var(--mono);text-transform:none;letter-spacing:0}.reader-tools-menu__zoom{margin:5px 0;padding:5px;display:grid;grid-template-columns:1fr 1fr 1fr;background:var(--paper-deep)}.reader-tools .reader-tools-menu__zoom button{height:34px;color:var(--ink)}.reader-tools .reader-tools-menu__zoom button:hover{color:var(--red);background:#fffdf6}
 .reader-tools .meaning-tool { color: #b8d6c0; border: 1px solid rgba(184,214,192,.25); }.reader-tools .meaning-tool.active{color:#17231b;background:#b8d6c0}
 .reader-tools .learning-tool{color:#e3bd74;border:1px solid rgba(227,189,116,.25)}.reader-tools .learning-tool.active{color:#231b0d;background:#e3bd74}
 .reader-tools span { font: 12px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
@@ -264,7 +265,7 @@ ruby rt { color: var(--red); font-size: .48em; font-weight: 500; }
   .library-shell { width: min(100% - 32px, 720px); }
   .library-hero { padding: 60px 0; display: block; }.library-hero > p { margin-top: 35px; width: min(100%, 420px); }
   .reader-header { grid-template-columns: 1fr auto; }.reader-progress { display: none; }.reader-title { display: none; }
-  .reader-tools button:not(.lens-tool):nth-child(n+2) { display: none; }
+  .reader-tools .learning-tool span,.reader-tools .meaning-tool span{display:none}.reader-tools .learning-tool,.reader-tools .meaning-tool{width:38px;padding:0}
   .tool-panel { width: min(520px, 100%); padding: 30px; }.reader-stage.with-panel { padding-right: 70px; opacity: .25; }
 }
 

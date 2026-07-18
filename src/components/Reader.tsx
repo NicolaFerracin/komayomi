@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookHeart, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Info, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookHeart, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Info, Library as LibraryIcon, Maximize2, Minimize2, MoreHorizontal, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -116,7 +116,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [data, setData] = useState(initialData)
   const [pageIndex, setPageIndex] = useState(initialData.current_page)
   const [zoom, setZoom] = useState(1)
-  const [showOverlays, setShowOverlays] = useState(true)
+  const [toolsMenu,setToolsMenu]=useState(false)
   const [layoutMode, setLayoutMode] = useState(false)
   const [panning, setPanning] = useState(false)
   const [panOffset,setPanOffset]=useState({x:0,y:0})
@@ -212,13 +212,12 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       if (event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key === 'ArrowLeft') move(1)
       if (event.key === 'ArrowRight') move(-1)
-      if (event.key === 'Escape') { if(!closeEditor())return;setLens(false);setWorkflowGuide(false); setNavigator(false);setLookupHistory(false); setSettings(false); setLookup(null); setShortcuts(false) }
+      if (event.key === 'Escape') { if(!closeEditor())return;setLens(false);setWorkflowGuide(false);setToolsMenu(false); setNavigator(false);setLookupHistory(false); setSettings(false); setLookup(null); setShortcuts(false) }
       if (event.key === '?' ) setShortcuts((value)=>!value)
       if (event.key.toLowerCase() === 'g') { if(!closeEditor())return;setNavigator(true); setLens(false); setSettings(false); setLookup(null) }
       if (event.key.toLowerCase() === 'l') { if(!closeEditor())return;setLens(true); setLensSeed(''); setNavigator(false); setSettings(false) }
       if (event.key.toLowerCase() === 'w') { if(!closeEditor())return;setWorkflowGuide(true);setLens(false);setMeaningCheck(false);setLearning(false);setNavigator(false);setSettings(false);setLookup(null) }
       if (event.key.toLowerCase() === 'b') toggleBookmark()
-      if (event.key.toLowerCase() === 'o') setShowOverlays((value)=>!value)
       if (event.key === '+' || event.key === '=') zoomAt(zoom + .1)
       if (event.key === '-') zoomAt(zoom - .1)
       if (event.key === '0') zoomAt(1)
@@ -291,24 +290,15 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
         <div className="reader-header__left"><button className="icon-button dark" onClick={()=>{if(closeEditor())onExit()}}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><strong>{data.volume}</strong></div></div>
         <button className="reader-progress" title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(true);setLens(false);setLookup(null);setSettings(false);setLookupHistory(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
         <div className="reader-tools">
-          <button className={showOverlays ? 'active' : ''} onClick={() => setShowOverlays(!showOverlays)} title="Toggle text overlays"><Highlighter size={18}/></button>
-          <button className={layoutMode ? 'active layout-tool' : 'layout-tool'} onClick={() => { if(!closeEditor())return;setLayoutMode(!layoutMode); setShowOverlays(true); setLens(false); setNavigator(false); setLookup(null);setLookupHistory(false); setSelectionAction(null) }} title="Edit text region layout"><Move size={18}/></button>
-          <button onClick={() => zoomAt(zoom - .1)}><ZoomOut size={18}/></button>
-          <button onClick={() => zoomAt(zoom + .1)}><ZoomIn size={18}/></button>
           <button className={learning?'active learning-tool':'learning-tool'} title="Learning Pass" onClick={()=>{if(!closeEditor())return;setLearning(!learning);setMeaningCheck(false);setLens(false);setNavigator(false);setSettings(false);setLookupHistory(false);setLookup(null);setRecall(null)}}><BookHeart size={18}/><span>Learning Pass</span></button>
           <button className={meaningCheck?'active meaning-tool':'meaning-tool'} title="Check your understanding" onClick={()=>{if(!closeEditor())return;if(meaningCheck&&lookup){setLookup(null);return}setMeaningCheck(!meaningCheck);setLearning(false);setLens(false);setNavigator(false);setSettings(false);setLookupHistory(false);setLookup(null);setRecall(null)}}><CheckCircle2 size={18}/><span>Meaning Check</span></button>
-          <button className={lens ? 'active lens-tool' : 'lens-tool'} onClick={() => { if(!closeEditor())return;setLens(!lens);setMeaningCheck(false);setLearning(false);setRecall(null); setLensSeed(''); setNavigator(false); setSettings(false);setLookupHistory(false) }}><Eye size={18}/><span>Page Lens</span></button>
-          <button className={navigator?'active':''} title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(!navigator);setLens(false);setLookup(null);setSettings(false);setLookupHistory(false)}}><Grid3X3 size={18}/></button>
+          <button aria-label="Page Lens" className={lens ? 'active lens-tool lens-tool--compact' : 'lens-tool lens-tool--compact'} title="Page Lens" onClick={() => { if(!closeEditor())return;setLens(!lens);setMeaningCheck(false);setLearning(false);setRecall(null); setLensSeed(''); setNavigator(false); setSettings(false);setLookupHistory(false) }}><Eye size={18}/></button>
           <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
-          <button className={lookupHistory?'active':''} title="Recent lookups" onClick={()=>{if(!closeEditor())return;setLookupHistory(!lookupHistory);setSettings(false);setLens(false);setNavigator(false);setLookup(null)}}><Clock3 size={18}/></button>
-          <button className={settings?'active':''} title="Reader settings" onClick={()=>{if(!closeEditor())return;setSettings(!settings);setLens(false);setNavigator(false);setLookup(null);setLookupHistory(false)}}><Settings2 size={18}/></button>
-          <button className={workflowGuide?'active':''} title="Reading & learning workflow" onClick={()=>{if(!closeEditor())return;setWorkflowGuide(!workflowGuide);setLens(false);setMeaningCheck(false);setLearning(false);setNavigator(false);setSettings(false);setLookup(null);setLookupHistory(false);setRecall(null)}}><Info size={18}/></button>
-          <button title={fullscreen?'Exit full screen':'Enter full screen'} onClick={toggleFullscreen}>{fullscreen?<Minimize2 size={18}/>:<Maximize2 size={18}/>}</button>
-          <button title="Keyboard shortcuts (?)" onClick={()=>setShortcuts(true)}><CircleHelp size={18}/></button>
+          <div className="reader-tools-overflow"><button className={toolsMenu?'active':''} title="More reader tools" aria-label="More reader tools" onClick={()=>setToolsMenu(!toolsMenu)}><MoreHorizontal size={20}/></button>{toolsMenu&&<div className="reader-tools-menu"><button onClick={()=>{setLayoutMode(!layoutMode);setToolsMenu(false);setLens(false);setSelectionAction(null)}}><Move size={16}/><span>{layoutMode?'Finish layout editing':'Edit text region layout'}</span></button><button onClick={()=>{setLookupHistory(true);setToolsMenu(false);setSettings(false);setLens(false);setLookup(null)}}><Clock3 size={16}/><span>Recent lookups</span></button><button onClick={()=>{setSettings(true);setToolsMenu(false);setLens(false);setLookup(null);setLookupHistory(false)}}><Settings2 size={16}/><span>Reader settings</span></button><button onClick={()=>{setWorkflowGuide(true);setToolsMenu(false);setLens(false);setMeaningCheck(false);setLearning(false);setSettings(false);setLookup(null)}}><Info size={16}/><span>Reading workflow</span></button><div className="reader-tools-menu__zoom"><button title="Zoom out" onClick={()=>zoomAt(zoom-.1)}><ZoomOut size={16}/></button><button onClick={()=>zoomAt(1)}>{Math.round(zoom*100)}%</button><button title="Zoom in" onClick={()=>zoomAt(zoom+.1)}><ZoomIn size={16}/></button></div><button onClick={()=>{toggleFullscreen();setToolsMenu(false)}}>{fullscreen?<Minimize2 size={16}/>:<Maximize2 size={16}/>}<span>{fullscreen?'Exit full screen':'Enter full screen'}</span></button><button onClick={()=>{setShortcuts(true);setToolsMenu(false)}}><CircleHelp size={16}/><span>Keyboard shortcuts</span></button></div>}</div>
         </div>
       </header>
 
-      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || meaningCheck || learning || workflowGuide || recall || lookup || settings || navigator || lookupHistory) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
+      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || meaningCheck || learning || workflowGuide || recall || lookup || settings || navigator || lookupHistory) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => {setSelectionAction(null);setToolsMenu(false)}} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
         {layoutMode && <div className="layout-mode-banner"><Move size={15}/><div><strong>Layout edit</strong><span>Drag a region to move it · pull its corner to resize · changes save on release</span></div><button onClick={undoLayout} disabled={!layoutHistory.length}><Undo2 size={13}/> Undo</button><button onClick={() => setLayoutMode(false)}>Done</button></div>}
         {page.ocr_quality?.suspicious && !page.ocr_quality.reviewed && (
           <div className="ocr-warning">
@@ -325,7 +315,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           transform:`translate3d(${panOffset.x}px,${panOffset.y}px,0)`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {showOverlays && page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} learned={lessonMatches.filter((lesson)=>(lesson.block_indices||[]).includes(index)).length} active={layoutMode || selectionAction?.block === index || lookup?.block === index || (searchMatch?.page===pageIndex&&searchMatch.block===index)} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} learned={lessonMatches.filter((lesson)=>(lesson.block_indices||[]).includes(index)).length} active={layoutMode || selectionAction?.block === index || lookup?.block === index || (searchMatch?.page===pageIndex&&searchMatch.block===index)} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
