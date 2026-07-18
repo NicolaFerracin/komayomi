@@ -11,15 +11,16 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], volumeId,
   const [saved, setSaved] = useState(false)
   const [sentenceSaved,setSentenceSaved]=useState(false);const[explanationSaved,setExplanationSaved]=useState(false)
   const [grammar, setGrammar] = useState<GrammarAnalysis | null>(null)
-  const [llmStatus,setLlmStatus]=useState<LlmStatus|null>(null);const[provider,setProvider]=useState('');const[aiRequest,setAiRequest]=useState('');const[explanation,setExplanation]=useState<GrammarExplanation|null>(null);const[explaining,setExplaining]=useState(false)
+  const [llmStatus,setLlmStatus]=useState<LlmStatus|null>(null);const[provider,setProvider]=useState('');const[aiRequest,setAiRequest]=useState('');const[explanations,setExplanations]=useState<GrammarExplanation[]>([]);const[explaining,setExplaining]=useState(false)
   useEffect(() => {
     let active = true
-    setResult(null); setError('')
+    setResult(null); setError('');setExplanations([]);setAiRequest('');setExplanationSaved(false)
     Promise.all([api.dictionary(query), api.grammar(sentence, query)]).then(([dictionary, analysis]) => { if (active) { setResult(dictionary); setGrammar(analysis) } }).catch((reason) => active && setError(reason.message))
     return () => { active = false }
   }, [query, sentence])
   useEffect(()=>{api.llmStatus().then((status)=>{setLlmStatus(status);setProvider(preferredProvider(status))}).catch(()=>undefined)},[])
-  async function explain(){setExplaining(true);setError('');try{setExplanation(await api.explainGrammar(sentence,query,provider,aiRequest,{volume_id:volumeId,page_index:pageIndex,block_index:blockIndex}));api.assistance(volumeId,pageIndex,'ai_explanation',blockIndex).catch(()=>undefined)}catch(reason){setError(reason instanceof Error?reason.message:'Could not explain this usage')}finally{setExplaining(false)}}
+  async function explain(){setExplaining(true);setError('');try{const next=await api.explainGrammar(sentence,query,provider,aiRequest,{volume_id:volumeId,page_index:pageIndex,block_index:blockIndex},explanations[0]?.thread_id);setExplanations((items)=>[...items,next]);setAiRequest('');api.assistance(volumeId,pageIndex,'ai_explanation',blockIndex).catch(()=>undefined)}catch(reason){setError(reason instanceof Error?reason.message:'Could not explain this usage')}finally{setExplaining(false)}}
+  const explanation=explanations.at(-1)||null
 
   return (
     <aside className="tool-panel lookup-panel">
@@ -33,9 +34,10 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], volumeId,
         <section className="vocab-ai">
           <div className="vocab-ai__head"><Sparkles size={17}/><div><strong>Focused AI explanation</strong><span>Full block context · focus: {query}</span></div></div>
           <div className="vocab-ai__privacy"><ShieldCheck size={14}/> Nothing is shared until you ask.</div><AiProviderStatus status={llmStatus} provider={provider}/>
-          <textarea value={aiRequest} onChange={(event)=>setAiRequest(event.target.value)} placeholder="Optional: What specifically should it explain?"/>
-          <button className="secondary-button" disabled={!provider||explaining} onClick={explain}>{explaining?<LoaderCircle className="spin" size={15}/>:<Sparkles size={15}/>} Explain this selection</button>
-          {explanation&&<><div className="vocab-ai__result"><span>{explanation.provider} · {explanation.model}</span><p>{explanation.explanation.interpretation}</p>{explanation.explanation.breakdown.map((part,index)=><dl key={index}><dt>{part.part}</dt><dd>{part.role}</dd></dl>)}<div className="vocab-ai__saved"><Check size={14}/><strong>Saved locally.</strong> You can always recover this from <button onClick={()=>onAskAI(sentence,query)}>Page Lens → Past Queries</button>.</div></div><button className="secondary-button" disabled={explanationSaved} onClick={async()=>{await api.saveItem({text:query,meaning:explanation.explanation.interpretation,context:sentence,notes:explanation.explanation.breakdown.map((part)=>`${part.part}: ${part.role}`).join('\n'),volume_id:volumeId,page_index:pageIndex,kind:'grammar'});setExplanationSaved(true)}}><BookMarked size={14}/>{explanationSaved?'Explanation saved':'Save explanation to Study Inbox'}</button></>}
+          <textarea value={aiRequest} onChange={(event)=>setAiRequest(event.target.value)} placeholder={explanations.length?'Ask a follow-up about this explanation…':'Optional: What specifically should it explain?'}/>
+          <button className="secondary-button" disabled={!provider||explaining||(explanations.length>0&&!aiRequest.trim())} onClick={explain}>{explaining?<LoaderCircle className="spin" size={15}/>:<Sparkles size={15}/>} {explanations.length?'Send follow-up':'Explain this selection'}</button>
+          {explanations.map((turn,turnIndex)=><div className="vocab-ai__turn" key={turn.id}>{turn.question&&<blockquote><span>YOU</span>{turn.question}</blockquote>}<div className="vocab-ai__result"><span>{turn.provider} · {turn.model} · {turnIndex?'FOLLOW-UP':'EXPLANATION'}</span><p>{turn.explanation.interpretation}</p>{turn.explanation.breakdown.map((part,index)=><dl key={index}><dt>{part.part}</dt><dd>{part.role}</dd></dl>)}{turn.explanation.uncertainty&&<aside><strong>Uncertainty</strong>{turn.explanation.uncertainty}</aside>}{turnIndex===explanations.length-1&&<div className="vocab-ai__saved"><Check size={14}/><strong>Conversation saved locally.</strong> Recover and continue it from <button onClick={()=>onAskAI(sentence,query)}>Page Lens → Past Queries</button>.</div>}</div></div>)}
+          {explanation&&<button className="secondary-button" disabled={explanationSaved} onClick={async()=>{await api.saveItem({text:query,meaning:explanation.explanation.interpretation,context:sentence,notes:explanation.explanation.breakdown.map((part)=>`${part.part}: ${part.role}`).join('\n'),volume_id:volumeId,page_index:pageIndex,kind:'grammar'});setExplanationSaved(true)}}><BookMarked size={14}/>{explanationSaved?'Explanation saved':'Save latest explanation to Study Inbox'}</button>}
           <button className="vocab-ai__open" onClick={()=>onAskAI(sentence,query)}><Eye size={15}/> Open the full Page Lens workspace</button>
         </section>
         <div className="dictionary-entries">

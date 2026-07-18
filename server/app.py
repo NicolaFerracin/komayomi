@@ -131,6 +131,7 @@ class GrammarExplain(BaseModel):
     volume_id: str | None = None
     page_index: int | None = None
     block_index: int | None = None
+    thread_id: str | None = None
 
 
 class MeaningAnswer(BaseModel):
@@ -382,14 +383,22 @@ async def explain_grammar(payload: GrammarExplain):
     prompt = f"""Explain the focused Japanese expression as it functions in this exact manga sentence. Do not replace kana with inferred kanji. Separate literal structure from natural meaning, mention ambiguity honestly, and be concise.
 SENTENCE: {payload.sentence}
 FOCUS: {payload.focus or payload.sentence}"""
+    prior=[]
+    if payload.thread_id:
+        prior=db.grammar_explanation_thread(payload.thread_id)
+        if not prior: raise HTTPException(404,"Conversation not found")
+        root=prior[0]
+        if root["sentence"]!=payload.sentence or root["focus"]!=(payload.focus or payload.sentence): raise HTTPException(400,"Conversation context does not match this selection")
+        prompt += "\n\nCONVERSATION SO FAR:\n"+json.dumps([{"reader":turn.get("question") or "Explain this usage","assistant":turn["explanation"]} for turn in prior],ensure_ascii=False)
     if payload.question:
         prompt += f"\nREADER REQUEST: {payload.question}"
     try: result, provider = await structured_text(payload.provider, prompt, GRAMMAR_EXPLANATION_SCHEMA)
     except (ValueError, httpx.HTTPError, json.JSONDecodeError) as error: raise HTTPException(503, str(error))
-    saved = {"id": uuid.uuid4().hex, "sentence": payload.sentence, "focus": payload.focus or payload.sentence,
+    explanation_id=uuid.uuid4().hex
+    saved = {"id": explanation_id, "sentence": payload.sentence, "focus": payload.focus or payload.sentence,
              "question": payload.question, "explanation": result, "provider": provider.id,
              "model": provider.model, "created_at": now(), "volume_id": payload.volume_id,
-             "page_index": payload.page_index, "block_index": payload.block_index}
+             "page_index": payload.page_index, "block_index": payload.block_index,"thread_id":payload.thread_id or explanation_id,"parent_id":prior[-1]["id"] if prior else None}
     db.save_grammar_explanation(saved)
     return saved
 
@@ -955,11 +964,15 @@ def ai_history(volume_id: str, page_index: int, response: Response):
     if not 0 <= page_index < len(payload["pages"]): raise HTTPException(404, "Page not found")
     sentences = ["".join(block.get("lines", [])) for block in payload["pages"][page_index].get("blocks", [])]
     items = []
-    for saved in db.grammar_explanations_for_page(volume_id, page_index, sentences):
-        explanation = saved["explanation"]
-        items.append({"id": saved["id"], "kind": "selection", "question": saved.get("question") or f"Explain {saved['focus']}",
-                      "focus": saved["focus"], "answer": explanation.get("interpretation", ""), "provider": saved["provider"],
-                      "model": saved["model"], "created_at": saved["created_at"], "details": explanation})
+    selection_threads={}
+    for saved in reversed(db.grammar_explanations_for_page(volume_id, page_index, sentences)):
+        selection_threads.setdefault(saved.get("thread_id") or saved["id"],[]).append(saved)
+    for thread_id,turns in selection_threads.items():
+        first,last=turns[0],turns[-1];explanation=last["explanation"]
+        items.append({"id":thread_id,"kind":"selection","question":first.get("question") or f"Explain {first['focus']}",
+                      "focus":first["focus"],"answer":explanation.get("interpretation",""),"provider":last["provider"],
+                      "model":last["model"],"created_at":last["created_at"],"details":{**explanation,"sentence":first["sentence"],"block_index":first.get("block_index"),
+                      "turns":[{"id":turn["id"],"question":turn.get("question") or "Explain this usage","answer":turn["explanation"],"provider":turn["provider"],"model":turn["model"],"created_at":turn["created_at"]} for turn in turns]}})
     for saved in db.lens_history(volume_id, page_index):
         analysis = saved.get("analysis", {})
         items.append({"id": saved["id"], "kind": "page", "question": saved.get("question") or "Analyze this page",

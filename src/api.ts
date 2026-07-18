@@ -18,7 +18,7 @@ export const api = {
   restoreBackup: (file:File)=>{const form=new FormData();form.append('file',file);return request<{ok:boolean;volumes:number;recovered_jobs:number;safety_backup:string}>('/api/restore',{method:'POST',body:form})},
   dictionary: (query: string) => request<DictionaryResult>(`/api/dictionary?q=${encodeURIComponent(query)}`),
   grammar: (sentence: string, focus: string) => request<GrammarAnalysis>(`/api/grammar?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
-  explainGrammar: (sentence: string, focus: string, provider?: string, question?: string, location?: {volume_id:string;page_index:number;block_index:number}) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null, question: question || null, ...location})}),
+  explainGrammar: (sentence: string, focus: string, provider?: string, question?: string, location?: {volume_id:string;page_index:number;block_index:number},thread_id?:string) => request<GrammarExplanation>('/api/grammar/explain', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sentence, focus, provider: provider || null, question: question || null, thread_id:thread_id||null, ...location})}),
   grammarExplanationHistory: (sentence: string, focus: string) => request<GrammarExplanation[]>(`/api/grammar/explanations?sentence=${encodeURIComponent(sentence)}&focus=${encodeURIComponent(focus)}`),
   llmStatus: () => request<LlmStatus>('/api/llm/status'),
   reader: (id: string) => request<ReaderData>(`/api/volumes/${id}/reader`),

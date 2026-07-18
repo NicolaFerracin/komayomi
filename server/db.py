@@ -14,7 +14,7 @@ from .models import Volume
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "komayomi.db"
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 REQUIRED_TABLES = {"volumes", "corrections", "lens_analyses", "saved_items", "page_overrides", "block_geometry", "block_text_overrides", "grammar_explanations", "page_bookmarks", "page_reviews"}
 
 
@@ -72,9 +72,14 @@ def _migration_5(db: sqlite3.Connection) -> None:
 def _migration_6(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS processing_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,volume_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 def _migration_7(db: sqlite3.Connection) -> None: db.execute("CREATE TABLE IF NOT EXISTS meaning_checks (id TEXT PRIMARY KEY,volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,cache_key TEXT NOT NULL,input_json TEXT NOT NULL,result_json TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL)")
 def _migration_8(db: sqlite3.Connection) -> None: db.executescript("""CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY,kind TEXT NOT NULL,form TEXT NOT NULL,reading TEXT,meaning TEXT NOT NULL,explanation TEXT NOT NULL,example_japanese TEXT NOT NULL,example_english TEXT NOT NULL,source_volume_id TEXT NOT NULL,source_page_index INTEGER NOT NULL,source_block_index INTEGER,status TEXT NOT NULL DEFAULT 'learning',encounters INTEGER NOT NULL DEFAULT 1,successful_recalls INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);CREATE UNIQUE INDEX IF NOT EXISTS lesson_identity ON lessons(kind,form);CREATE TABLE IF NOT EXISTS lesson_dismissals (volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,proposal_key TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(volume_id,page_index,proposal_key));CREATE TABLE IF NOT EXISTS assistance_events (id TEXT PRIMARY KEY,volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,block_index INTEGER,event_type TEXT NOT NULL,lesson_id TEXT,created_at TEXT NOT NULL);""")
+def _migration_9(db: sqlite3.Connection) -> None:
+    _column(db,"grammar_explanations","thread_id","TEXT")
+    _column(db,"grammar_explanations","parent_id","TEXT")
+    db.execute("UPDATE grammar_explanations SET thread_id=id WHERE thread_id IS NULL")
+    db.execute("CREATE INDEX IF NOT EXISTS grammar_explanation_thread ON grammar_explanations(thread_id,created_at)")
 
 
-MIGRATIONS = {2:_migration_2, 3:_migration_3, 4:_migration_4, 5:_migration_5, 6:_migration_6, 7:_migration_7, 8:_migration_8}
+MIGRATIONS = {2:_migration_2, 3:_migration_3, 4:_migration_4, 5:_migration_5, 6:_migration_6, 7:_migration_7, 8:_migration_8, 9:_migration_9}
 
 
 def _migrate(db: sqlite3.Connection) -> None:
@@ -146,7 +151,8 @@ INITIAL_SCHEMA = """
                 id TEXT PRIMARY KEY, sentence TEXT NOT NULL, focus TEXT NOT NULL,
                 question TEXT, provider TEXT NOT NULL, model TEXT NOT NULL,
                 result_json TEXT NOT NULL, created_at TEXT NOT NULL,
-                volume_id TEXT, page_index INTEGER, block_index INTEGER
+                volume_id TEXT, page_index INTEGER, block_index INTEGER,
+                thread_id TEXT, parent_id TEXT
             );
             CREATE TABLE IF NOT EXISTS page_bookmarks (
                 volume_id TEXT NOT NULL, page_index INTEGER NOT NULL,
@@ -454,8 +460,14 @@ def meaning_check_history(volume_id: str, page_index: int) -> list[dict]:
 
 def save_grammar_explanation(item: dict) -> None:
     with connection() as conn:
-        conn.execute("INSERT INTO grammar_explanations (id,sentence,focus,question,provider,model,result_json,created_at,volume_id,page_index,block_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                     (item["id"], item["sentence"], item["focus"], item.get("question"), item["provider"], item["model"], json.dumps(item["explanation"], ensure_ascii=False), item["created_at"], item.get("volume_id"), item.get("page_index"), item.get("block_index")))
+        conn.execute("INSERT INTO grammar_explanations (id,sentence,focus,question,provider,model,result_json,created_at,volume_id,page_index,block_index,thread_id,parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     (item["id"], item["sentence"], item["focus"], item.get("question"), item["provider"], item["model"], json.dumps(item["explanation"], ensure_ascii=False), item["created_at"], item.get("volume_id"), item.get("page_index"), item.get("block_index"),item.get("thread_id") or item["id"],item.get("parent_id")))
+
+
+def grammar_explanation_thread(thread_id: str) -> list[dict]:
+    with connection() as conn:
+        rows=conn.execute("SELECT * FROM grammar_explanations WHERE thread_id=? OR (thread_id IS NULL AND id=?) ORDER BY created_at,id",(thread_id,thread_id)).fetchall()
+    return [{**dict(row),"explanation":json.loads(row["result_json"])} for row in rows]
 
 
 def grammar_explanations(sentence: str, focus: str) -> list[dict]:
@@ -494,7 +506,7 @@ def delete_ai_history(volume_id: str, page_index: int, kind: str, item_id: str, 
         if kind == "selection":
             placeholders = ",".join("?" for _ in sentences)
             legacy = f" OR (volume_id IS NULL AND sentence IN ({placeholders}))" if sentences else ""
-            cursor = conn.execute(f"DELETE FROM grammar_explanations WHERE id=? AND ((volume_id=? AND page_index=?){legacy})", [item_id, volume_id, page_index, *sentences])
+            cursor = conn.execute(f"DELETE FROM grammar_explanations WHERE (thread_id=? OR id=?) AND ((volume_id=? AND page_index=?){legacy})", [item_id,item_id, volume_id, page_index, *sentences])
         elif kind == "page":
             cursor = conn.execute("DELETE FROM lens_analyses WHERE volume_id=? AND page_index=? AND cache_key=?", (volume_id, page_index, item_id))
         else:

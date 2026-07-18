@@ -17,7 +17,8 @@ test.beforeEach(async ({page}) => {
       {id:'word',text:'悟空',reading:'ごくう',meaning:'Goku',volume_id:'v1',page_index:1,context:null,notes:null,created_at:'2026-01-01',kind:'vocabulary'},
       {id:'sentence',text:'むかしむかし',reading:null,meaning:'Once upon a time',volume_id:'v1',page_index:0,context:null,notes:null,created_at:'2026-01-02',kind:'sentence'},
       {id:'grammar',text:'のこと',reading:null,meaning:'the matter of',volume_id:'v1',page_index:0,context:null,notes:null,created_at:'2026-01-03',kind:'grammar'}]})
-    if(url.pathname==='/api/volumes/v1/pages/0/ai-history'&&method==='GET') return route.fulfill({json:[{id:'ai1',kind:'selection',question:'Explain のこと',focus:'のこと',answer:'It frames the matter.',provider:'mock',model:'local-test',created_at:'2026-01-01',details:{breakdown:[{part:'のこと',role:'nominal frame'}]}}]})
+    if(url.pathname==='/api/volumes/v1/pages/0/ai-history'&&method==='GET') return route.fulfill({json:[{id:'ai1',kind:'selection',question:'Explain のこと',focus:'のこと',answer:'It frames the matter.',provider:'mock',model:'local-test',created_at:'2026-01-01',details:{sentence:'むかしむかしのこと',block_index:0,breakdown:[{part:'のこと',role:'nominal frame'}],turns:[{id:'turn1',question:'Explain のこと',answer:{interpretation:'It frames the matter.',breakdown:[{part:'のこと',role:'nominal frame'}],uncertainty:''},provider:'mock',model:'local-test',created_at:'2026-01-01'}]}}]})
+    if(url.pathname==='/api/grammar/explain'&&method==='POST') return route.fulfill({json:{id:'turn2',thread_id:route.request().postDataJSON().thread_id||'turn2',parent_id:null,sentence:'むかしむかしのこと',focus:'のこと',question:route.request().postDataJSON().question,created_at:'2026-01-02',provider:'mock',model:'local-test',explanation:{interpretation:'A contextual follow-up.',breakdown:[],uncertainty:''}}})
     if(url.pathname==='/api/volumes/v1/pages/0/meaning-check'&&method==='POST') return route.fulfill({json:{id:'check1',provider:'mock',model:'local-test',cached:false,created_at:'2026-01-01',check:{summary:'You understood the story opening.',evaluations:[{block_index:0,meaning_score:95,literal_score:72,verdict:'Meaning correct',literal_translation:'Long ago, long ago',natural_translation:'Once upon a time',contextual_meaning:'A conventional story opening',correct:['You captured the time frame.'],missing:['The repetition gives it a fairy-tale cadence.'],added:[],incorrect:[]}]}}})
     if(url.pathname.endsWith('/lesson-matches')&&method==='GET') return route.fulfill({json:[]})
     if(url.pathname==='/api/lessons'&&method==='GET') return route.fulfill({json:[]})
@@ -156,6 +157,15 @@ test('deletes saved AI history from Page Lens', async ({page}) => {
   const deleted=page.waitForRequest((request)=>request.url().includes('/ai-history/selection/ai1')&&request.method()==='DELETE')
   await page.getByTitle('Delete saved query').click();await deleted
   await expect(page.getByText('Explain のこと')).toHaveCount(0)
+})
+
+test('continues a saved AI explanation with its prior conversation context',async({page})=>{
+  await page.getByRole('button',{name:/Page Lens/}).click()
+  await page.getByRole('button',{name:/Explain のこと/}).click()
+  await page.getByPlaceholder('Ask a follow-up using everything discussed above…').fill('Is this natural in conversation?')
+  const request=page.waitForRequest((value)=>value.url().endsWith('/api/grammar/explain')&&value.method()==='POST')
+  await page.getByRole('button',{name:'Send follow-up'}).click()
+  expect((await request).postDataJSON()).toMatchObject({thread_id:'ai1',question:'Is this natural in conversation?',sentence:'むかしむかしのこと',focus:'のこと'})
 })
 
 test('restores a database backup through the guarded library UI', async ({page}) => {
