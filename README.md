@@ -68,5 +68,20 @@ If OCR fails or appears stuck, open **View log** on its Library card. Restart bo
 - Click-drag empty artwork: pan; click or select overlay text: interact with a bubble
 - Arrow Left / Right: next / previous page
 - `G`: page browser and transcript search
-- `L`: Page Lens, `S`: settings, `H`: recent lookups, `B`: bookmark
+- `L`: Page Lens, `W`: preferred reading workflow, `S`: settings, `H`: recent lookups, `B`: bookmark
 - `0`: reset zoom, `?`: complete shortcut guide, `Esc`: close the active tool
+
+## Preferred reading and learning workflow
+
+1. **Read unaided.** Look at the page and form a rough interpretation before opening help.
+2. **Resolve only blocking language.** Select the smallest word or phrase preventing comprehension; avoid translating complete bubbles by default.
+3. **State your understanding.** Decide what the bubble communicates in your own English.
+4. **Run Meaning Check.** Compare meaning coverage, literal structure, omissions, additions, and contextual meaning for the bubbles you attempted.
+5. **Investigate important gaps.** Use local vocabulary and grammar first; use AI explanation only when deterministic help is insufficient.
+6. **Run Learning Pass.** After understanding the page, request up to three transferable lessons grounded in mistakes, lookups, useful readings, and recurring patterns.
+7. **Keep almost nothing.** Keep only what would make another page easier. Zero or one lesson is a healthy default.
+8. **Recall inside the manga.** When a kept form recurs, attempt it before revealing vocabulary. Real encounters move it from learning to recognized to familiar.
+
+The loop is: **attempt → selective help → check → keep little → meet it again → recall**.
+
+There are no quotas, streaks, due dates, or overdue reviews. Translation resolves the current page; Learning Pass decides what should improve the next one. Progress means needing less assistance—not completing more cards. This guide is always available from the reader’s **Reading & learning workflow** info button or the `W` shortcut.

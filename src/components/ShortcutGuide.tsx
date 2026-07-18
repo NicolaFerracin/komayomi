@@ -3,7 +3,7 @@ import { Keyboard, X } from 'lucide-react'
 const groups = [
   ['Navigate', [['←', 'Next page'], ['→', 'Previous page'], ['G', 'Browse or search pages']]],
   ['Read', [['+', 'Zoom in'], ['−', 'Zoom out'], ['0', 'Reset zoom'], ['O', 'Toggle OCR overlays']]],
-  ['Keep & understand', [['B', 'Bookmark this page'], ['L', 'Open Page Lens'], ['?', 'Show these shortcuts'], ['Esc', 'Close the active panel']]],
+  ['Keep & understand', [['B', 'Bookmark this page'], ['L', 'Open Page Lens'], ['W', 'Reading workflow'], ['?', 'Show these shortcuts'], ['Esc', 'Close the active panel']]],
 ]
 
 export function ShortcutGuide({onClose}:{onClose:()=>void}) {

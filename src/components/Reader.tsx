@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookHeart, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookHeart, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Grid3X3, Highlighter, Info, Library as LibraryIcon, Maximize2, Minimize2, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -17,6 +17,7 @@ import { useRecentLookups } from '../hooks/useRecentLookups'
 import { MeaningCheck } from './MeaningCheck'
 import { LearningPass } from './LearningPass'
 import { RecallPrompt } from './RecallPrompt'
+import { WorkflowGuide } from './WorkflowGuide'
 
 function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   if (!spans.length) return <>{text}</>
@@ -124,6 +125,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const [lens, setLens] = useState(false)
   const [meaningCheck,setMeaningCheck]=useState(false)
   const [learning,setLearning]=useState(false)
+  const [workflowGuide,setWorkflowGuide]=useState(false)
   const [lessonMatches,setLessonMatches]=useState<Lesson[]>([])
   const [lensSeed, setLensSeed] = useState('')
   const [settings, setSettings] = useState(false)
@@ -144,8 +146,9 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   const page = data.pages[pageIndex]
 
   useEffect(()=>{api.bookmarks(data.volume_id).then((items)=>setBookmarks(new Set(items))).catch(()=>undefined)},[data.volume_id])
-  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory||learning)setMeaningCheck(false)},[editor,lens,settings,navigator,lookupHistory,learning])
-  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory||meaningCheck)setLearning(false)},[editor,lens,settings,navigator,lookupHistory,meaningCheck])
+  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory||learning||workflowGuide)setMeaningCheck(false)},[editor,lens,settings,navigator,lookupHistory,learning,workflowGuide])
+  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory||meaningCheck||workflowGuide)setLearning(false)},[editor,lens,settings,navigator,lookupHistory,meaningCheck,workflowGuide])
+  useEffect(()=>{if(editor!==null||lens||settings||navigator||lookupHistory||meaningCheck||learning||lookup||recall)setWorkflowGuide(false)},[editor,lens,settings,navigator,lookupHistory,meaningCheck,learning,lookup,recall])
   useEffect(()=>{api.lessonMatches(data.volume_id,pageIndex).then(setLessonMatches).catch(()=>setLessonMatches([]))},[data.volume_id,pageIndex])
   useEffect(()=>setPanOffset({x:0,y:0}),[pageIndex])
   useEffect(()=>{const update=(event:Event)=>setDisplay((event as CustomEvent<ReaderPreferences>).detail);window.addEventListener('komayomi:reader-preferences',update);return()=>window.removeEventListener('komayomi:reader-preferences',update)},[])
@@ -155,13 +158,13 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   function move(delta: number) {
     if(!closeEditor())return
     const next = Math.min(data.pages.length - 1, Math.max(0, pageIndex + delta))
-    setPageIndex(next);setSearchMatch(null); setLens(false);setMeaningCheck(false);setLearning(false);setRecall(null); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next);setSearchMatch(null); setLens(false);setMeaningCheck(false);setLearning(false);setWorkflowGuide(false);setRecall(null); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
   function goToPage(next: number,block?:number) {
     if(!closeEditor())return
-    setPageIndex(next);setSearchMatch(block===undefined?null:{page:next,block}); setLens(false);setMeaningCheck(false);setLearning(false);setRecall(null); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
+    setPageIndex(next);setSearchMatch(block===undefined?null:{page:next,block}); setLens(false);setMeaningCheck(false);setLearning(false);setWorkflowGuide(false);setRecall(null); setNavigator(false);setLookupHistory(false); setSelectionAction(null); setLookup(null)
     api.position(data.volume_id, next).catch(() => undefined)
   }
 
@@ -209,10 +212,11 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       if (event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key === 'ArrowLeft') move(1)
       if (event.key === 'ArrowRight') move(-1)
-      if (event.key === 'Escape') { if(!closeEditor())return;setLens(false); setNavigator(false);setLookupHistory(false); setSettings(false); setLookup(null); setShortcuts(false) }
+      if (event.key === 'Escape') { if(!closeEditor())return;setLens(false);setWorkflowGuide(false); setNavigator(false);setLookupHistory(false); setSettings(false); setLookup(null); setShortcuts(false) }
       if (event.key === '?' ) setShortcuts((value)=>!value)
       if (event.key.toLowerCase() === 'g') { if(!closeEditor())return;setNavigator(true); setLens(false); setSettings(false); setLookup(null) }
       if (event.key.toLowerCase() === 'l') { if(!closeEditor())return;setLens(true); setLensSeed(''); setNavigator(false); setSettings(false) }
+      if (event.key.toLowerCase() === 'w') { if(!closeEditor())return;setWorkflowGuide(true);setLens(false);setMeaningCheck(false);setLearning(false);setNavigator(false);setSettings(false);setLookup(null) }
       if (event.key.toLowerCase() === 'b') toggleBookmark()
       if (event.key.toLowerCase() === 'o') setShowOverlays((value)=>!value)
       if (event.key === '+' || event.key === '=') zoomAt(zoom + .1)
@@ -298,12 +302,13 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <button className={bookmarks.has(pageIndex)?'active':''} title={bookmarks.has(pageIndex)?'Remove page bookmark':'Bookmark this page'} onClick={toggleBookmark}><Bookmark size={18} fill={bookmarks.has(pageIndex)?'currentColor':'none'}/></button>
           <button className={lookupHistory?'active':''} title="Recent lookups" onClick={()=>{if(!closeEditor())return;setLookupHistory(!lookupHistory);setSettings(false);setLens(false);setNavigator(false);setLookup(null)}}><Clock3 size={18}/></button>
           <button className={settings?'active':''} title="Reader settings" onClick={()=>{if(!closeEditor())return;setSettings(!settings);setLens(false);setNavigator(false);setLookup(null);setLookupHistory(false)}}><Settings2 size={18}/></button>
+          <button className={workflowGuide?'active':''} title="Reading & learning workflow" onClick={()=>{if(!closeEditor())return;setWorkflowGuide(!workflowGuide);setLens(false);setMeaningCheck(false);setLearning(false);setNavigator(false);setSettings(false);setLookup(null);setLookupHistory(false);setRecall(null)}}><Info size={18}/></button>
           <button title={fullscreen?'Exit full screen':'Enter full screen'} onClick={toggleFullscreen}>{fullscreen?<Minimize2 size={18}/>:<Maximize2 size={18}/>}</button>
           <button title="Keyboard shortcuts (?)" onClick={()=>setShortcuts(true)}><CircleHelp size={18}/></button>
         </div>
       </header>
 
-      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || meaningCheck || learning || recall || lookup || settings || navigator || lookupHistory) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
+      <section ref={stageRef} className={`reader-stage ${(editor !== null || lens || meaningCheck || learning || workflowGuide || recall || lookup || settings || navigator || lookupHistory) ? 'with-panel' : ''} ${panning ? 'is-panning' : ''}`} onMouseDown={() => setSelectionAction(null)} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelZoom}>
         {layoutMode && <div className="layout-mode-banner"><Move size={15}/><div><strong>Layout edit</strong><span>Drag a region to move it · pull its corner to resize · changes save on release</span></div><button onClick={undoLayout} disabled={!layoutHistory.length}><Undo2 size={13}/> Undo</button><button onClick={() => setLayoutMode(false)}>Done</button></div>}
         {page.ocr_quality?.suspicious && !page.ocr_quality.reviewed && (
           <div className="ocr-warning">
@@ -336,6 +341,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
       />}
       {meaningCheck&&<MeaningCheck volumeId={data.volume_id} pageIndex={pageIndex} page={page} hidden={Boolean(lookup)} onClose={()=>setMeaningCheck(false)}/>}
       {learning&&<LearningPass volumeId={data.volume_id} pageIndex={pageIndex} onClose={()=>setLearning(false)} onLessonsChanged={()=>api.lessonMatches(data.volume_id,pageIndex).then(setLessonMatches)}/>}
+      {workflowGuide&&<WorkflowGuide onClose={()=>setWorkflowGuide(false)}/>}
       {recall&&<RecallPrompt lesson={recall.lesson} context={recall.selection.context} onClose={()=>setRecall(null)} onAnswer={async(success)=>{await api.recallLesson(recall.lesson.id,success);await api.assistance(data.volume_id,pageIndex,success?'recall_success':'recall_reveal',recall.selection.block,recall.lesson.id)}} onContinue={()=>{const selection=recall.selection;setRecall(null);openVocabulary(selection)}}/>}
       {settings && <SettingsPanel onClose={()=>setSettings(false)}/>}
       {navigator && <PageNavigator volumeId={data.volume_id} pages={data.pages} current={pageIndex} bookmarks={bookmarks} onChoose={goToPage} onClose={()=>setNavigator(false)}/>}

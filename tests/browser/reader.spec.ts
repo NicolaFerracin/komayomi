@@ -196,3 +196,12 @@ test('asks for recall before reopening vocabulary for learned language',async({p
   await expect(page.getByRole('heading',{name:'once upon a time'})).toBeVisible();await page.getByRole('button',{name:/Continue to vocabulary/}).click()
   await expect(page.getByRole('heading',{name:'むかしむかし'})).toBeVisible()
 })
+
+test('keeps the preferred learning workflow available inside the reader',async({page})=>{
+  await page.getByTitle('Reading & learning workflow').click()
+  await expect(page.getByRole('heading',{name:'Reading workflow'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Read unaided'})).toBeVisible()
+  await expect(page.getByText('No daily quota, streak, due date, or overdue pile.')).toBeVisible()
+  await page.keyboard.press('Escape');await expect(page.getByRole('heading',{name:'Reading workflow'})).toHaveCount(0)
+  await page.keyboard.press('w');await expect(page.getByRole('heading',{name:'Reading workflow'})).toBeVisible()
+})
