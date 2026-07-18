@@ -1,3 +1,5 @@
+"""FastAPI boundary for the local KomaYomi reader."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,8 +19,9 @@ from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from . import db
 from .jobs import output_path, pause_volume, recover_interrupted, start_volume, stop_all
@@ -28,7 +31,13 @@ from .llm import public_status, structured_text, structured_vision
 from .grammar import analyze as analyze_grammar
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_FORMAT_SUFFIXES = {"JPEG": {".jpg", ".jpeg"}, "PNG": {".png"}, "WEBP": {".webp"}}
 UPLOAD_ROOT = db.DATA_DIR / "library"
+MAX_UPLOAD_PAGES = 500
+MAX_IMAGE_BYTES = 32 * 1024 * 1024
+MAX_VOLUME_BYTES = 2 * 1024 * 1024 * 1024
+MAX_IMAGE_PIXELS = 100_000_000
+UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
 @asynccontextmanager
@@ -40,9 +49,10 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="KomaYomi", version="0.1.0", lifespan=lifespan)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -179,6 +189,45 @@ def image_set_fingerprint(pages: list[Path]) -> str:
         with page.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""): digest.update(chunk)
     return digest.hexdigest()
+
+
+def validate_uploaded_image(path: Path) -> None:
+    try:
+        with Image.open(path) as image:
+            if image.format not in IMAGE_FORMAT_SUFFIXES or path.suffix.lower() not in IMAGE_FORMAT_SUFFIXES[image.format]:
+                raise HTTPException(400, f"{path.name} does not match its image extension")
+            if image.width * image.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(413, f"{path.name} exceeds the 100 megapixel image limit")
+            image.verify()
+    except Image.DecompressionBombError as error:
+        raise HTTPException(413, f"{path.name} has unsafe image dimensions") from error
+    except (OSError, UnidentifiedImageError) as error:
+        raise HTTPException(400, f"{path.name} is not a valid image") from error
+
+
+async def store_uploaded_pages(files: list[UploadFile], source: Path) -> list[Path]:
+    if len(files) > MAX_UPLOAD_PAGES:
+        raise HTTPException(413, f"A volume can contain at most {MAX_UPLOAD_PAGES} uploaded files")
+    total_size = 0
+    pages: list[Path] = []
+    for upload in files:
+        suffix = Path(upload.filename or "").suffix.lower()
+        if suffix not in IMAGE_SUFFIXES:
+            continue
+        target = source / f"{len(pages) + 1:04d}{suffix}"
+        file_size = 0
+        with target.open("wb") as output:
+            while chunk := await upload.read(UPLOAD_CHUNK_BYTES):
+                file_size += len(chunk)
+                total_size += len(chunk)
+                if file_size > MAX_IMAGE_BYTES:
+                    raise HTTPException(413, f"{upload.filename or target.name} exceeds the 32 MB image limit")
+                if total_size > MAX_VOLUME_BYTES:
+                    raise HTTPException(413, "The uploaded volume exceeds the 2 GB limit")
+                output.write(chunk)
+        validate_uploaded_image(target)
+        pages.append(target)
+    return pages
 
 
 def create_volume(source: Path, title: str, series: str, fingerprint: str | None = None) -> Volume:
@@ -386,17 +435,20 @@ async def upload_volume(
     series: Annotated[str, Form()],
     files: Annotated[list[UploadFile], File()],
 ):
+    title, series = title.strip(), series.strip()
+    if not title or not series:
+        raise HTTPException(400, "Title and series cannot be empty")
+    if len(title) > 200 or len(series) > 200:
+        raise HTTPException(400, "Title and series must be at most 200 characters")
     volume_id = uuid.uuid4().hex
-    source = UPLOAD_ROOT / volume_id / title
+    # Display metadata never participates in filesystem path construction.
+    source = UPLOAD_ROOT / volume_id / "pages"
     source.mkdir(parents=True, exist_ok=True)
-    for upload in files:
-        name = Path(upload.filename or "page.jpg").name
-        suffix = Path(name).suffix.lower()
-        if suffix not in IMAGE_SUFFIXES:
-            continue
-        with (source / name).open("wb") as target:
-            shutil.copyfileobj(upload.file, target)
-    pages = image_files(source)
+    try:
+        pages = await store_uploaded_pages(files, source)
+    except Exception:
+        shutil.rmtree(source.parent, ignore_errors=True)
+        raise
     if not pages:
         shutil.rmtree(source.parent, ignore_errors=True)
         raise HTTPException(400, "The upload contains no supported page images.")
@@ -783,6 +835,20 @@ Do not penalize natural rewording. Judge literal structural alignment separately
             image_bytes,mime=page_image(volume,page);result,provider=await structured_vision(request.provider,prompt,image_bytes,mime,MEANING_CHECK_SCHEMA)
         else: result,provider=await structured_text(request.provider,prompt,MEANING_CHECK_SCHEMA)
     except (ValueError,httpx.HTTPError,json.JSONDecodeError) as error: raise HTTPException(503,str(error))
+    evaluations=score_meaning_evaluations(result,answers)
+    answered={item["block_index"] for item in answers}
+    if {item.get("block_index") for item in evaluations} != answered:
+        raise HTTPException(503,"The AI returned incomplete feedback. Nothing was saved; please retry.")
+    result["evaluations"]=evaluations
+    average=round(sum(item["meaning_score"] for item in evaluations)/len(evaluations))
+    result["summary"]=f"Your interpretation captured about {average}% of the evaluated meaning across {len(evaluations)} text block{'s' if len(evaluations)!=1 else ''}. Review the missing units below before comparing the full translations."
+    item={"id":uuid.uuid4().hex,"volume_id":volume_id,"page_index":page_index,"cache_key":cache_key,"input":{"answers":answers,"include_artwork":request.include_artwork,"question":request.question},"result":result,"provider":provider.id,"model":provider.model,"created_at":now()}
+    db.save_meaning_check(item)
+    return {"id":item["id"],"check":result,"provider":provider.id,"model":provider.model,"cached":False,"created_at":item["created_at"]}
+
+
+def score_meaning_evaluations(result: dict, answers: list[dict]) -> list[dict]:
+    """Ground model coverage claims in exact excerpts from the reader's answer."""
     answered={item["block_index"] for item in answers};answer_text={item["block_index"]:item["interpretation"] for item in answers};evaluations=[]
     for evaluation in result.get("evaluations",[]):
         if evaluation.get("block_index") not in answered: continue
@@ -803,14 +869,7 @@ Do not penalize natural rewording. Judge literal structural alignment separately
         score=evaluation["meaning_score"]
         evaluation["verdict"]="Strong understanding" if score>=90 else "Mostly understood, with some missing meaning" if score>=70 else "Partial understanding; important meaning is still missing" if score>=45 else "Major parts of the meaning were not captured"
         evaluations.append(evaluation)
-    if {item.get("block_index") for item in evaluations} != answered:
-        raise HTTPException(503,"The AI returned incomplete feedback. Nothing was saved; please retry.")
-    result["evaluations"]=evaluations
-    average=round(sum(item["meaning_score"] for item in evaluations)/len(evaluations))
-    result["summary"]=f"Your interpretation captured about {average}% of the evaluated meaning across {len(evaluations)} text block{'s' if len(evaluations)!=1 else ''}. Review the missing units below before comparing the full translations."
-    item={"id":uuid.uuid4().hex,"volume_id":volume_id,"page_index":page_index,"cache_key":cache_key,"input":{"answers":answers,"include_artwork":request.include_artwork,"question":request.question},"result":result,"provider":provider.id,"model":provider.model,"created_at":now()}
-    db.save_meaning_check(item)
-    return {"id":item["id"],"check":result,"provider":provider.id,"model":provider.model,"cached":False,"created_at":item["created_at"]}
+    return evaluations
 
 
 def normalize_contents_proposal(blocks: list[dict]) -> list[dict]:

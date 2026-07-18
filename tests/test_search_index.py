@@ -1,3 +1,5 @@
+"""Correction-aware volume search-index tests."""
+
 import tempfile
 import unittest
 from pathlib import Path

@@ -1,1 +1,1 @@
-
+"""KomaYomi backend package."""

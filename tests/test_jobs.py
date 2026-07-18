@@ -1,3 +1,5 @@
+"""OCR job lifecycle tests."""
+
 import asyncio
 import json
 import tempfile

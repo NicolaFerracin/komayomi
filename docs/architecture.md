@@ -12,6 +12,8 @@ The Vite/React client is a local reader UI. FastAPI owns persistence, dictionary
 
 Approved OCR edits layer over immutable Mokuro metadata. Search is rebuilt lazily after transcript changes. Focused AI history is attached to volume/page/block identity so correcting the transcript does not orphan it.
 
+Uploaded files cross a strict boundary in `server/app.py`: display metadata is never used as a path, generated sequential filenames prevent collisions, byte limits are enforced while streaming, and Pillow verifies image contents before a volume is created. The unauthenticated service is intentionally restricted to trusted localhost hosts.
+
 Meaning Check batches all answered regions on a page into one structured provider request. Unanswered translations remain hidden; the server grounds comparison with canonical text, printed ruby, local tokens, and grammar matches. Identical attempts are cached, incomplete model responses are rejected, and successful reports are retained in Page Lens history.
 
 Learning Pass inspects a page only after an explicit request and proposes at most three transferable lessons. Keeping and dismissing are separate durable actions. Kept Japanese forms are matched deterministically against later corrected transcripts; selecting a match opens recall before dictionary assistance. Knowledge states are encounter-based and never create a due queue. Assistance events measure reliance on lookup/AI versus successful recall and independently verified Meaning Check comprehension.

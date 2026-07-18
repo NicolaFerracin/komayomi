@@ -1,3 +1,5 @@
+"""Persistent OCR processing-log tests."""
+
 import tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch

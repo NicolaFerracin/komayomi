@@ -1,3 +1,5 @@
+"""Deterministic Japanese grammar pattern analysis."""
+
 from __future__ import annotations
 
 import re

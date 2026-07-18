@@ -1,3 +1,5 @@
+"""Local Japanese tokenization and dictionary lookup."""
+
 from __future__ import annotations
 
 import re

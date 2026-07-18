@@ -16,8 +16,8 @@ Run the complete regression suite with `npm test`, and create a production bundl
 ### Manual startup
 
 ```sh
-.venv/bin/uvicorn server.app:app --reload
-npm run dev
+.venv/bin/uvicorn server.app:app --reload --host 127.0.0.1
+npm run dev -- --host 127.0.0.1
 ```
 
 ## Current capabilities
@@ -56,7 +56,9 @@ include API usage; these integrations use the providers' metered APIs.
 
 ## Data and recovery
 
-Source manga images are never modified. Imported folders remain in place; uploaded images live under `data/library`. Reader edits and history live in `data/komayomi.db`, while Mokuro output sits beside each source folder. The database upgrades through ordered, transactional schema migrations on startup.
+Source manga images are never modified. Imported folders remain in place; uploaded images live under generated directories in `data/library`, independent of their display titles and original filenames. Uploads are limited to 500 files, 32 MB per image, and 2 GB per volume; image contents are validated before OCR starts. Reader edits and history live in `data/komayomi.db`, while Mokuro output sits beside each source folder. The database upgrades through ordered, transactional schema migrations on startup.
+
+KomaYomi has no user authentication because it is a single-user local application. The development servers bind only to `127.0.0.1`, and the API rejects untrusted hostnames. Do not expose it through a public interface or reverse proxy without adding authentication and request-origin protection.
 
 Use **Backup** before moving machines or making large changes. **Restore** validates SQLite integrity and required tables, creates a safety copy of the current database, swaps the chosen backup atomically, then resumes interrupted OCR jobs.
 

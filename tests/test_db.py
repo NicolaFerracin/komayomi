@@ -1,3 +1,5 @@
+"""Database migration, backup, and identity tests."""
+
 import sqlite3
 import tempfile
 import unittest

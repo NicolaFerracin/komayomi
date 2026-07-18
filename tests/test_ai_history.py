@@ -1,3 +1,5 @@
+"""AI history persistence tests."""
+
 import tempfile
 import unittest
 from pathlib import Path

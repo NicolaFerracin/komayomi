@@ -1,3 +1,5 @@
+"""Reader payload normalization and edit-boundary tests."""
+
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch

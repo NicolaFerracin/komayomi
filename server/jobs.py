@@ -1,3 +1,5 @@
+"""Durable asynchronous Mokuro processing jobs."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,17 +23,31 @@ def cache_path(source: Path) -> Path:
     return source.parent / "_ocr" / source.name
 
 
+def reconcile_existing_result(volume: Volume, result: Path) -> bool:
+    """Mark a volume ready when a complete pre-existing Mokuro file is valid."""
+    if not result.exists(): return False
+    try:
+        payload = json.loads(result.read_text(encoding="utf-8"))
+        volume.status = "ready"; volume.error = None
+        volume.processed_pages = len(payload["pages"]); volume.page_count = len(payload["pages"])
+        save_volume(volume); append_processing_log(volume.id, "Existing OCR output verified; volume is ready.")
+        return True
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return False
+
+
+async def terminate_process(process: asyncio.subprocess.Process | None) -> None:
+    """Terminate a live OCR subprocess, escalating when it does not exit."""
+    if not process or process.returncode is not None: return
+    process.terminate()
+    try: await asyncio.wait_for(process.wait(), timeout=3)
+    except asyncio.TimeoutError: process.kill(); await process.wait()
+
+
 async def process_volume(volume: Volume) -> None:
     source = Path(volume.source_path)
     result = output_path(source)
-    if result.exists():
-        try:
-            payload = json.loads(result.read_text(encoding="utf-8"))
-            volume.status = "ready"; volume.error = None
-            volume.processed_pages = len(payload["pages"]); volume.page_count = len(payload["pages"])
-            save_volume(volume); append_processing_log(volume.id, "Existing OCR output verified; volume is ready."); return
-        except (OSError, json.JSONDecodeError, KeyError, TypeError):
-            pass
+    if reconcile_existing_result(volume, result): return
     volume.status = "processing"
     volume.error = None
     save_volume(volume)
@@ -68,10 +84,7 @@ async def process_volume(volume: Volume) -> None:
             volume.error = "".join(log)[-2000:] or "Mokuro did not produce an output file."
         append_processing_log(volume.id, "OCR completed successfully." if volume.status == "ready" else f"OCR failed: {volume.error}")
     except asyncio.CancelledError:
-        if process and process.returncode is None:
-            process.terminate()
-            try: await asyncio.wait_for(process.wait(), timeout=3)
-            except asyncio.TimeoutError: process.kill(); await process.wait()
+        await terminate_process(process)
         volume.status = "queued"; volume.error = None
         append_processing_log(volume.id, "OCR stopped; job returned to the queue.")
         save_volume(volume)

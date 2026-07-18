@@ -1,3 +1,5 @@
+"""Structured requests to configured language-model providers."""
+
 from __future__ import annotations
 
 import base64

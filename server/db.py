@@ -1,3 +1,5 @@
+"""SQLite persistence, migrations, and recovery operations."""
+
 from __future__ import annotations
 
 import json
@@ -85,10 +87,7 @@ def _migrate(db: sqlite3.Connection) -> None:
             db.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
 
 
-def initialize() -> None:
-    with connection() as db:
-        db.executescript(
-            """
+INITIAL_SCHEMA = """
             CREATE TABLE IF NOT EXISTS volumes (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -178,8 +177,12 @@ def initialize() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS lesson_identity ON lessons(kind,form);
             CREATE TABLE IF NOT EXISTS lesson_dismissals (volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,proposal_key TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(volume_id,page_index,proposal_key));
             CREATE TABLE IF NOT EXISTS assistance_events (id TEXT PRIMARY KEY,volume_id TEXT NOT NULL,page_index INTEGER NOT NULL,block_index INTEGER,event_type TEXT NOT NULL,lesson_id TEXT,created_at TEXT NOT NULL);
-            """
-        )
+"""
+
+
+def initialize() -> None:
+    with connection() as db:
+        db.executescript(INITIAL_SCHEMA)
         _migrate(db)
 
 
