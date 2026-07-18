@@ -162,6 +162,7 @@ test('deletes saved AI history from Page Lens', async ({page}) => {
 test('continues a saved AI explanation with its prior conversation context',async({page})=>{
   await page.getByRole('button',{name:/Page Lens/}).click()
   await page.getByRole('button',{name:/Explain のこと/}).click()
+  await expect(page.locator('.ai-conversation .ai-history__result').first()).toHaveCSS('background-color','rgb(38, 58, 69)')
   await page.getByPlaceholder('Ask a follow-up using everything discussed above…').fill('Is this natural in conversation?')
   const request=page.waitForRequest((value)=>value.url().endsWith('/api/grammar/explain')&&value.method()==='POST')
   await page.getByRole('button',{name:'Send follow-up'}).click()
