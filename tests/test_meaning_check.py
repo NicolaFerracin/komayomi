@@ -25,6 +25,8 @@ class MeaningCheckTests(unittest.TestCase):
         with patch.object(app,"require_volume",return_value=self.volume),patch.object(app,"reader_payload",return_value={"pages":[self.page]}),patch.object(app,"apply_saved_text"),patch.object(app,"structured_text",new=AsyncMock(return_value=(self.result,provider))) as call:
             first=asyncio.run(app.meaning_check("v1",0,request));second=asyncio.run(app.meaning_check("v1",0,request))
         self.assertFalse(first["cached"]);self.assertTrue(second["cached"]);self.assertEqual(call.await_count,1)
+        prompt=call.await_args.args[1]
+        self.assertIn("communicative function",prompt);self.assertIn("equivalent non-English interjection",prompt);self.assertIn("Distinguish omissions from contradictions",prompt)
         self.assertEqual(db.meaning_check_history("v1",0)[0]["input"]["answers"][0]["interpretation"],"Once upon a time")
         self.assertTrue(db.delete_ai_history("v1",0,"comprehension",first["id"],[]))
         self.assertEqual(db.meaning_check_history("v1",0),[])
