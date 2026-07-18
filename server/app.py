@@ -473,7 +473,7 @@ def reader(volume_id: str):
                     block["lines"][line_index] = correction["canonical_text"]
                     block["ruby"][line_index] = correction["ruby"]
     payload["volume_id"] = volume_id
-    payload["current_page"] = volume.current_page
+    payload["current_page"] = min(max(0, volume.current_page), max(0, len(payload["pages"]) - 1))
     payload["title"] = volume.series
     payload["volume"] = volume.title
     return payload
@@ -520,8 +520,9 @@ def image(volume_id: str, filename: str):
 
 @app.put("/api/volumes/{volume_id}/position")
 def position(volume_id: str, payload: Position):
-    require_volume(volume_id)
-    db.save_position(volume_id, max(0, payload.page))
+    volume = require_volume(volume_id)
+    page = min(max(0, payload.page), max(0, volume.page_count - 1))
+    db.save_position(volume_id, page)
     return {"ok": True}
 
 
@@ -561,7 +562,17 @@ def remove_bookmark(volume_id: str, page_index: int):
 
 @app.put("/api/volumes/{volume_id}/corrections")
 def correction(volume_id: str, payload: Correction):
-    require_volume(volume_id)
+    volume = require_volume(volume_id)
+    metadata = reader_payload(volume)
+    apply_saved_text(metadata, volume_id)
+    if not 0 <= payload.page_index < len(metadata["pages"]):
+        raise HTTPException(404, "Page not found")
+    blocks = metadata["pages"][payload.page_index].get("blocks", [])
+    if not 0 <= payload.block_index < len(blocks):
+        raise HTTPException(404, "Text region not found")
+    lines = blocks[payload.block_index].get("lines", [])
+    if not 0 <= payload.line_index < len(lines):
+        raise HTTPException(404, "Text line not found")
     db.save_correction(
         volume_id, payload.page_index, payload.block_index, payload.line_index,
         payload.raw_text, payload.canonical_text, payload.ruby, now(),
@@ -572,8 +583,10 @@ def correction(volume_id: str, payload: Correction):
 @app.put("/api/volumes/{volume_id}/pages/{page_index}/blocks/{block_index}/geometry")
 def save_geometry(volume_id: str, page_index: int, block_index: int, payload: BlockGeometry):
     volume = require_volume(volume_id); metadata = reader_payload(volume)
+    apply_saved_text(metadata, volume_id)
     if not 0 <= page_index < len(metadata["pages"]): raise HTTPException(404, "Page not found")
     page = metadata["pages"][page_index]
+    if not 0 <= block_index < len(page.get("blocks", [])): raise HTTPException(404, "Text region not found")
     if len(payload.box) != 4: raise HTTPException(400, "A box must contain four coordinates")
     x1, y1, x2, y2 = payload.box
     box = [max(0, min(page["img_width"], x1)), max(0, min(page["img_height"], y1)),
@@ -585,7 +598,10 @@ def save_geometry(volume_id: str, page_index: int, block_index: int, payload: Bl
 
 @app.put("/api/volumes/{volume_id}/pages/{page_index}/blocks/{block_index}/text")
 def save_block_text(volume_id: str, page_index: int, block_index: int, payload: BlockText):
-    require_volume(volume_id)
+    volume = require_volume(volume_id); metadata = reader_payload(volume)
+    apply_saved_text(metadata, volume_id)
+    if not 0 <= page_index < len(metadata["pages"]): raise HTTPException(404, "Page not found")
+    if not 0 <= block_index < len(metadata["pages"][page_index].get("blocks", [])): raise HTTPException(404, "Text region not found")
     if not payload.lines or len(payload.lines) != len(payload.ruby):
         raise HTTPException(400, "Each transcription line needs a corresponding ruby list")
     db.save_block_text(volume_id, page_index, block_index, payload.lines, payload.ruby, now())
