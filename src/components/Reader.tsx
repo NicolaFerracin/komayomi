@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookHeart, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Info, Library as LibraryIcon, Maximize2, Minimize2, MoreHorizontal, Move, Pencil, Search, Settings2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookHeart, BookOpen, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Info, Library as LibraryIcon, Maximize2, Minimize2, MoreHorizontal, Move, Pencil, Search, Settings2, Trash2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRef } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
@@ -34,10 +34,11 @@ function RubyText({ text, spans }: { text: string; spans: RubySpan[] }) {
   return <>{nodes}</>
 }
 
-function BubbleOverlay({ block, pageWidth, pageHeight, textScale, active, learned, layoutMode, onClick, onSelection, onGeometryChange }: {
+function BubbleOverlay({ block, pageWidth, pageHeight, textScale, active, learned, layoutMode, onClick, onDelete, onSelection, onGeometryChange }: {
   block: TextBlock; pageWidth: number; pageHeight: number; onClick: () => void
   onSelection: (text: string, ruby: RubySpan[], context: string, x: number, y: number) => void
   active: boolean; learned:number; layoutMode: boolean; textScale:number; onGeometryChange: (box: [number, number, number, number], commit: boolean, original?: [number, number, number, number]) => void
+  onDelete: () => void
 }) {
   const geometryDrag = useRef<{x: number; y: number; box: [number, number, number, number]; resize: boolean} | null>(null)
   const [rawX1, rawY1, rawX2, rawY2] = block.box
@@ -72,6 +73,7 @@ function BubbleOverlay({ block, pageWidth, pageHeight, textScale, active, learne
   }
   function geometryStart(event: ReactPointerEvent<HTMLDivElement>) {
     if (!layoutMode || event.button !== 0) return
+    if ((event.target as Element).closest('button')) return
     event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
     geometryDrag.current = {x: event.clientX, y: event.clientY, box: [...block.box], resize: Boolean((event.target as Element).closest('.bubble-resize-handle'))}
   }
@@ -107,6 +109,7 @@ function BubbleOverlay({ block, pageWidth, pageHeight, textScale, active, learne
       </span>
       {learned>0&&<span className="learned-badge" title={`${learned} saved lesson${learned===1?'':'s'} appears here`}>seen</span>}
       <button className="bubble-edit-trigger" aria-label="Edit transcription" title="Edit transcription" onClick={(event) => { event.stopPropagation(); onClick() }}><Pencil size={11}/></button>
+      {layoutMode && <button className="bubble-delete-trigger" aria-label="Delete text region" title="Delete text region" onPointerDown={(event)=>event.stopPropagation()} onClick={(event)=>{event.stopPropagation();onDelete()}}><Trash2 size={12}/></button>}
       {layoutMode && <span className="bubble-resize-handle" title="Resize region"/>}
     </div>
   )
@@ -242,6 +245,15 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     setEditorDirty(false);setEditor(null);setSelectionAction(null);setLookup(null)
   }
 
+  async function deleteLayoutBlock(blockIndex:number) {
+    if(!window.confirm('Delete this text region? It will no longer appear, be searchable, or be included in learning tools.'))return
+    try {
+      await api.deleteBlock(data.volume_id,pageIndex,blockIndex)
+      setData((current)=>({...current,pages:current.pages.map((item,index)=>index!==pageIndex?item:{...item,blocks:item.blocks.filter((_,index)=>index!==blockIndex)})}))
+      setLayoutHistory([]);setSelectionAction(null);setLookup(null)
+    } catch(error) { window.alert(error instanceof Error?error.message:'The text region could not be deleted.') }
+  }
+
   function changeGeometry(blockIndex: number, box: [number, number, number, number], commit: boolean, original?: [number, number, number, number]) {
     setData((current) => ({...current, pages: current.pages.map((item, p) => p !== pageIndex ? item : ({...item, blocks: item.blocks.map((block, b) => b === blockIndex ? {...block, box} : block)}))}))
     if (commit) { if(original)setLayoutHistory((items)=>[...items,{page:pageIndex,block:blockIndex,box:original}]); api.blockGeometry(data.volume_id, pageIndex, blockIndex, box).catch(() => undefined) }
@@ -322,7 +334,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           transform:`translate3d(${panOffset.x}px,${panOffset.y}px,0)`,
         }}>
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
-          {page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} learned={lessonMatches.filter((lesson)=>(lesson.block_indices||[]).includes(index)).length} active={layoutMode || selectionAction?.block === index || lookup?.block === index || (searchMatch?.page===pageIndex&&searchMatch.block===index)} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
+          {page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} learned={lessonMatches.filter((lesson)=>(lesson.block_indices||[]).includes(index)).length} active={layoutMode || selectionAction?.block === index || lookup?.block === index || (searchMatch?.page===pageIndex&&searchMatch.block===index)} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onDelete={()=>deleteLayoutBlock(index)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
         <button className="page-turn page-turn--next" aria-label="Next page" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>

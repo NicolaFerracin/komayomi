@@ -116,6 +116,16 @@ test('deletes an unwanted OCR text region from the bubble editor',async({page})=
   await expect(page.locator('.bubble-overlay')).toHaveCount(0)
 })
 
+test('deletes an unwanted region directly in layout editing',async({page})=>{
+  await page.getByTitle('More reader tools').click()
+  await page.getByRole('button',{name:'Edit text region layout'}).click()
+  await expect(page.getByText('Layout edit',{exact:true})).toBeVisible()
+  page.once('dialog',(dialog)=>dialog.accept())
+  const deleted=page.waitForRequest((request)=>request.url().endsWith('/pages/0/blocks/0')&&request.method()==='DELETE')
+  await page.getByRole('button',{name:'Delete text region'}).click();await deleted
+  await expect(page.locator('.bubble-overlay')).toHaveCount(0)
+})
+
 test('adds and removes a page bookmark', async ({page}) => {
   const add=page.waitForRequest((request)=>request.url().endsWith('/bookmarks/0')&&request.method()==='PUT')
   await page.getByTitle('Bookmark this page').click();await add
