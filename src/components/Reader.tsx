@@ -72,10 +72,11 @@ function BubbleOverlay({ block, pageWidth, pageHeight, textScale, active, learne
     event.clipboardData.setData('text/plain', fragment.textContent || '')
   }
   function geometryStart(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!layoutMode || event.button !== 0) return
-    if ((event.target as Element).closest('button')) return
+    const resize=Boolean((event.target as Element).closest('.bubble-resize-handle'))
+    if ((!layoutMode&&!resize) || event.button !== 0) return
+    if ((event.target as Element).closest('button')&&!resize) return
     event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
-    geometryDrag.current = {x: event.clientX, y: event.clientY, box: [...block.box], resize: Boolean((event.target as Element).closest('.bubble-resize-handle'))}
+    geometryDrag.current = {x: event.clientX, y: event.clientY, box: [...block.box], resize}
   }
   function geometryMove(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = geometryDrag.current
@@ -110,7 +111,7 @@ function BubbleOverlay({ block, pageWidth, pageHeight, textScale, active, learne
       {learned>0&&<span className="learned-badge" title={`${learned} saved lesson${learned===1?'':'s'} appears here`}>seen</span>}
       <button className="bubble-edit-trigger" aria-label="Edit transcription" title="Edit transcription" onClick={(event) => { event.stopPropagation(); onClick() }}><Pencil size={11}/></button>
       {layoutMode && <button className="bubble-delete-trigger" aria-label="Delete text region" title="Delete text region" onPointerDown={(event)=>event.stopPropagation()} onClick={(event)=>{event.stopPropagation();onDelete()}}><Trash2 size={12}/></button>}
-      {layoutMode && <span className="bubble-resize-handle" title="Resize region"/>}
+      <button type="button" className="bubble-resize-handle" title="Drag to resize text region" aria-label="Resize text region" onClick={(event)=>event.stopPropagation()} onKeyDown={(event)=>{const step=10;let [bx1,by1,bx2,by2]=block.box;if(event.key==='ArrowRight')bx2=Math.min(pageWidth,bx2+step);else if(event.key==='ArrowLeft')bx2=Math.max(bx1+12,bx2-step);else if(event.key==='ArrowDown')by2=Math.min(pageHeight,by2+step);else if(event.key==='ArrowUp')by2=Math.max(by1+12,by2-step);else return;event.preventDefault();event.stopPropagation();onGeometryChange([bx1,by1,bx2,by2],true,block.box)}}/>
     </div>
   )
 }

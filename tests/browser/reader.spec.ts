@@ -265,11 +265,14 @@ test('reader and library have no automated accessibility violations',async({page
   expect(libraryAudit.violations).toEqual([])
 })
 
-test('does not clip transcription text at imperfect OCR boundaries',async({page})=>{
+test('resizes an imperfect OCR boundary directly while reading',async({page})=>{
   const overlay=page.locator('.bubble-overlay').first()
   await overlay.hover()
-  await expect(overlay).toHaveCSS('overflow','visible')
-  await expect(overlay.locator('.bubble-overlay__ink')).toHaveCSS('overflow','visible')
+  const handle=overlay.getByTitle('Drag to resize text region');await expect(handle).toBeVisible()
+  const box=await handle.boundingBox();if(!box)throw new Error('Resize handle has no bounds')
+  const saved=page.waitForRequest((request)=>request.url().endsWith('/pages/0/blocks/0/geometry')&&request.method()==='PUT')
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+25,box.y+box.height/2+35);await page.mouse.up();await saved
+  await expect(overlay).toHaveCSS('overflow','hidden')
 })
 
 test('mobile library reflows and reader controls remain touchable',async({page})=>{
