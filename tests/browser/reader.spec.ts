@@ -265,6 +265,13 @@ test('reader and library have no automated accessibility violations',async({page
   expect(libraryAudit.violations).toEqual([])
 })
 
+test('does not clip transcription text at imperfect OCR boundaries',async({page})=>{
+  const overlay=page.locator('.bubble-overlay').first()
+  await overlay.hover()
+  await expect(overlay).toHaveCSS('overflow','visible')
+  await expect(overlay.locator('.bubble-overlay__ink')).toHaveCSS('overflow','visible')
+})
+
 test('mobile library reflows and reader controls remain touchable',async({page})=>{
   await page.setViewportSize({width:390,height:844})
   await page.getByRole('button',{name:'Back to library'}).click()
