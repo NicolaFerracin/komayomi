@@ -660,6 +660,18 @@ def save_block_text(volume_id: str, page_index: int, block_index: int, payload: 
     return {"ok": True}
 
 
+@app.delete("/api/volumes/{volume_id}/pages/{page_index}/blocks/{block_index}")
+def delete_block(volume_id: str, page_index: int, block_index: int):
+    volume = require_volume(volume_id); metadata = reader_payload(volume)
+    apply_saved_text(metadata, volume_id)
+    if not 0 <= page_index < len(metadata["pages"]): raise HTTPException(404, "Page not found")
+    blocks = metadata["pages"][page_index].get("blocks", [])
+    if not 0 <= block_index < len(blocks): raise HTTPException(404, "Text region not found")
+    remaining = [block for index, block in enumerate(blocks) if index != block_index]
+    db.replace_page_blocks(volume_id, page_index, remaining, now())
+    return {"ok": True, "blocks": remaining}
+
+
 RUBY_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {"base": {"type": "string"}, "reading": {"type": "string"}, "printed": {"type": "boolean"}},

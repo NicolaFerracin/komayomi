@@ -56,5 +56,18 @@ class DatabaseSafetyTests(unittest.TestCase):
         self.assertEqual(db.get_volume_by_fingerprint('same-pages').id, 'v2')
         self.assertIsNone(db.get_volume_by_fingerprint('different-pages'))
 
+    def test_replacing_page_blocks_clears_stale_index_based_edits(self):
+        with db.connection() as connection:
+            connection.execute("INSERT INTO corrections VALUES ('v',2,0,0,'raw','fixed','[]','now')")
+            connection.execute("INSERT INTO block_geometry VALUES ('v',2,0,'[0,0,1,1]','now')")
+            connection.execute("INSERT INTO block_text_overrides VALUES ('v',2,0,'[\"fixed\"]','[[]]','now')")
+            connection.execute("INSERT INTO search_index VALUES ('v',2,0,'fixed','fixed','fixed')")
+        db.replace_page_blocks('v',2,[{'lines':['kept']}],'later')
+        with db.connection() as connection:
+            saved=connection.execute("SELECT blocks_json FROM page_overrides WHERE volume_id='v' AND page_index=2").fetchone()
+            self.assertIsNotNone(saved)
+            for table in ('corrections','block_geometry','block_text_overrides','search_index'):
+                self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table} WHERE volume_id='v'").fetchone()[0],0)
+
 
 if __name__ == '__main__': unittest.main()

@@ -44,7 +44,7 @@ export function Library({ volumes, restoring, onImport, onOpen, onStudy, onEdit,
         <section className="volume-grid">
           {volumes.map((volume, index) => (
             <article className="volume-card" key={volume.id} style={{'--delay': `${index * 60}ms`} as CSSProperties}>
-              <button className="volume-card__cover" disabled={volume.status !== 'ready'} onClick={() => onOpen(volume)}>
+              <button className="volume-card__cover" aria-label={`Open ${volume.series} ${volume.title}`} disabled={volume.status !== 'ready'} onClick={() => onOpen(volume)}>
                 {volume.cover_filename
                   ? <img src={`/api/volumes/${volume.id}/images/${encodeURIComponent(volume.cover_filename)}`} alt=""/>
                   : <div className="cover-placeholder">読</div>}
@@ -53,13 +53,13 @@ export function Library({ volumes, restoring, onImport, onOpen, onStudy, onEdit,
               </button>
               <div className="volume-card__meta">
                 <div className="volume-card__meta-head"><div className="eyebrow">{volume.series}</div><button title="Edit volume details" onClick={()=>onEdit(volume)}><Pencil size={13}/></button></div>
-                <h3>{volume.title}</h3>
+                <h2>{volume.title}</h2>
                 {volume.status === 'ready' ? (
                   <div className="volume-status"><Clock3 size={14}/>{volume.page_count} pages <i/> {Math.round(volume.current_page / Math.max(volume.page_count, 1) * 100)}% read</div>
                 ) : (
                   <div className="processing-status">
                     <div><Sparkles size={14}/> {volume.status === 'error' ? 'Needs attention' : volume.status==='paused'?'Processing paused':'Reading the ink'}<span>{Math.round(volume.progress * 100)}%</span></div>
-                    <div className="progress-track"><span style={{width: `${volume.progress * 100}%`}}/></div>
+                    <div className="progress-track" role="progressbar" aria-label={`OCR progress for ${volume.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(volume.progress*100)}><span style={{width: `${volume.progress * 100}%`}}/></div>
                     <div className="processing-actions">{volume.status==='processing'||volume.status==='queued'?<button onClick={()=>onPause(volume)}><Pause size={12}/> Pause</button>:<button onClick={()=>onRetry(volume)}><RotateCw size={12}/> {volume.status==='error'?'Retry OCR':'Resume'}</button>}<button onClick={()=>openLog(volume)}><FileText size={12}/> View log</button></div>
                   </div>
                 )}
@@ -68,7 +68,7 @@ export function Library({ volumes, restoring, onImport, onOpen, onStudy, onEdit,
           ))}
         </section>
       )}
-      {log&&<div className="modal-backdrop" onMouseDown={(event)=>{if(event.target===event.currentTarget)setLog(null)}}><section className="processing-log-dialog" role="dialog" aria-label="OCR processing log"><header><div><span>OCR DIAGNOSTICS</span><h2>{log.volume.title}</h2></div><button onClick={()=>setLog(null)}><X size={18}/></button></header><pre>{log.lines.length?log.lines.map((line)=>`[${new Date(line.created_at).toLocaleTimeString()}] ${line.message}`).join('\n'):'No diagnostic messages have been recorded yet.'}</pre></section></div>}
+      {log&&<div className="modal-backdrop" onMouseDown={(event)=>{if(event.target===event.currentTarget)setLog(null)}}><section className="processing-log-dialog" role="dialog" aria-modal="true" aria-label="OCR processing log"><header><div><span>OCR DIAGNOSTICS</span><h2>{log.volume.title}</h2></div><button aria-label="Close processing log" onClick={()=>setLog(null)}><X size={18}/></button></header><pre>{log.lines.length?log.lines.map((line)=>`[${new Date(line.created_at).toLocaleTimeString()}] ${line.message}`).join('\n'):'No diagnostic messages have been recorded yet.'}</pre></section></div>}
     </main>
   )
 }

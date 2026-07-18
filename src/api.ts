@@ -1,4 +1,4 @@
-import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LearningPassResult, LearningProgress, LensAnalysis, Lesson, LessonProposal, LlmStatus, MeaningCheckResult, PageVisionProposal, ReaderData, RubySpan, SavedItem, VisionProposal, Volume, VolumeSearchHit } from './types'
+import type { AiHistoryItem, DictionaryResult, GrammarAnalysis, GrammarExplanation, LearningPassResult, LearningProgress, LensAnalysis, Lesson, LessonProposal, LlmStatus, MeaningCheckResult, PageVisionProposal, ReaderData, RubySpan, SavedItem, TextBlock, VisionProposal, Volume, VolumeSearchHit } from './types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options)
@@ -60,6 +60,7 @@ export const api = {
   blockText: (id: string, page: number, block: number, lines: string[], ruby: RubySpan[][]) => request<{ok: boolean}>(`/api/volumes/${id}/pages/${page}/blocks/${block}/text`, {
     method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lines, ruby}),
   }),
+  deleteBlock: (id:string,page:number,block:number)=>request<{ok:boolean;blocks:TextBlock[]}>(`/api/volumes/${id}/pages/${page}/blocks/${block}`,{method:'DELETE'}),
   visionBlock: (id: string, page: number, block: number, provider?: string) => request<VisionProposal>(`/api/volumes/${id}/pages/${page}/blocks/${block}/vision`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: provider || null }),
   }),

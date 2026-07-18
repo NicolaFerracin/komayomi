@@ -30,10 +30,10 @@ export function ImportDialog({ onClose, onImported }: {
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <section className="import-card" onMouseDown={(event) => event.stopPropagation()}>
-        <button className="icon-button import-card__close" onClick={onClose}><X size={18}/></button>
+      <section className="import-card" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="icon-button import-card__close" aria-label="Close import" onClick={onClose}><X size={18}/></button>
         <div className="eyebrow">NEW MATERIAL</div>
-        <h2>Bring in a volume</h2>
+        <h2 id="import-title">Bring in a volume</h2>
         <p className="muted">Pages stay on this Mac. KomaYomi runs the first OCR pass locally.</p>
         <div className="mode-switch">
           <button className={mode === 'local' ? 'active' : ''} onClick={() => setMode('local')}><FolderOpen size={17}/> Existing folder</button>
@@ -44,7 +44,7 @@ export function ImportDialog({ onClose, onImported }: {
         ) : (
           <button className="drop-zone" onClick={() => input.current?.click()}>
             <Images size={28}/><strong>{files.length ? `${files.length} pages selected` : 'Choose manga pages'}</strong><span>JPG, PNG or WEBP · ordered by filename</span>
-            <input ref={input} hidden multiple type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []))}/>
+            <input ref={input} hidden multiple type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []).sort((left,right)=>left.name.localeCompare(right.name,undefined,{numeric:true})))}/>
           </button>
         )}
         <div className="field-row">
@@ -52,7 +52,7 @@ export function ImportDialog({ onClose, onImported }: {
           <label className="field"><span>Series <i>optional</i></span><input value={series} onChange={(e) => setSeries(e.target.value)} placeholder="Dragon Ball"/></label>
         </div>
         {error && <div className="error-note">{error}</div>}
-        <button className="primary-button" disabled={busy || (mode === 'local' ? !path : !files.length)} onClick={submit}>
+        <button className="primary-button" aria-busy={busy} disabled={busy || (mode === 'local' ? !path : !files.length)} onClick={submit}>
           {busy ? <><LoaderCircle className="spin" size={18}/> Preparing volume…</> : 'Import & process'}
         </button>
       </section>

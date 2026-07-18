@@ -29,7 +29,7 @@ export function PageNavigator({ volumeId, pages, current, bookmarks, onChoose, o
     })
   }, [pages, query, bookmarkedOnly, issuesOnly, bookmarks, readingHits])
   return <aside className="tool-panel page-navigator">
-    <header><div><span className="eyebrow">GO TO PAGE</span><h2>Pages</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header>
+    <header><div><span className="eyebrow">GO TO PAGE</span><h2>Pages</h2></div><button className="icon-button" aria-label="Close panel" onClick={onClose}><X size={19}/></button></header>
     <form className="page-jump" onSubmit={(event) => { event.preventDefault(); jump() }}><label><span>PAGE</span><input value={value} inputMode="numeric" onChange={(event) => setValue(event.target.value)} onFocus={(event) => event.target.select()}/></label><span>of {pages.length}</span><button className="primary-button">Go</button></form>
     <label className="page-search"><Search size={15}/><input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search Japanese transcript…"/><span>{matches.length} pages</span></label>
     <div className="page-filters"><button className={bookmarkedOnly?'active':''} onClick={()=>setBookmarkedOnly(!bookmarkedOnly)}><Bookmark size={14} fill={bookmarkedOnly?'currentColor':'none'}/> Bookmarks <span>{bookmarks.size}</span></button><button className={issuesOnly?'active':''} onClick={()=>setIssuesOnly(!issuesOnly)}><TriangleAlert size={14}/> Needs attention <span>{pages.filter((page)=>page.ocr_quality?.suspicious&&!page.ocr_quality.reviewed).length}</span></button></div>

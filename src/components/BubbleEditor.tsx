@@ -1,4 +1,4 @@
-import { Check, RefreshCw, RotateCcw, ShieldCheck, X } from 'lucide-react'
+import { Check, RefreshCw, RotateCcw, ShieldCheck, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
@@ -6,13 +6,14 @@ import type { LlmStatus, RubySpan, TextBlock, VisionProposal } from '../types'
 import { preferredProvider } from '../preferences'
 import { AiProviderStatus } from './AiProviderStatus'
 
-export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, onSaved, onDirtyChange }: {
+export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, onSaved, onDeleted, onDirtyChange }: {
   volumeId: string
   pageIndex: number
   blockIndex: number
   block: TextBlock
   onClose: () => void
   onSaved: (lines: string[], ruby: RubySpan[][]) => void
+  onDeleted: () => void
   onDirtyChange:(dirty:boolean)=>void
 }) {
   const [lines, setLines] = useState([...block.lines])
@@ -24,6 +25,8 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
   const [proposal, setProposal] = useState<VisionProposal | null>(null)
   const [visionError, setVisionError] = useState('')
   const [visionBusy, setVisionBusy] = useState(false)
+  const [deleteBusy,setDeleteBusy]=useState(false)
+  const [deleteError,setDeleteError]=useState('')
 
   useEffect(() => {
     setLines([...block.lines])
@@ -56,6 +59,14 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
     finally { setVisionBusy(false) }
   }
 
+  async function remove() {
+    if (!window.confirm('Delete this text region? It will no longer appear, be searchable, or be included in learning tools.')) return
+    setDeleteBusy(true);setDeleteError('')
+    try { await api.deleteBlock(volumeId,pageIndex,blockIndex);onDirtyChange(false);onDeleted() }
+    catch(error){setDeleteError(error instanceof Error?error.message:'The text region could not be deleted.')}
+    finally{setDeleteBusy(false)}
+  }
+
   function acceptProposal() {
     if (!proposal) return
     const proposed = proposal.proposal.lines
@@ -67,7 +78,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
 
   return (
     <aside className="tool-panel bubble-editor">
-      <header><div><span className="eyebrow">TRANSCRIPTION</span><h2>Bubble {blockIndex + 1}</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header>
+      <header><div><span className="eyebrow">TRANSCRIPTION</span><h2>Bubble {blockIndex + 1}</h2></div><button className="icon-button" aria-label="Close transcription editor" onClick={onClose}><X size={19}/></button></header>
       <p className="muted">The original OCR stays preserved. Your correction becomes the canonical reading everywhere else.</p>
       <div className="editor-lines">
         {lines.map((line, index) => (
@@ -89,6 +100,7 @@ export function BubbleEditor({ volumeId, pageIndex, blockIndex, block, onClose, 
       {visionError && <div className="error-note">{visionError}</div>}
       {proposal && <section className="vision-proposal"><span className="eyebrow">VISION PROPOSAL · NOT SAVED</span><p>{proposal.proposal.summary}</p>{proposal.proposal.lines.map((line, index) => <div key={index}><small>{Math.round(line.confidence * 100)}% confidence</small><strong>{renderRuby(line.text, line.ruby)}</strong></div>)}<button className="primary-button" onClick={acceptProposal}><Check size={16}/> Use this proposal in editor</button><button className="text-button" onClick={() => setProposal(null)}>Discard</button></section>}
         <button className="text-button" onClick={() => { onDirtyChange(true);setLines([...block.raw_lines]); setRuby(block.raw_lines.map(() => [])); setMarkups([...block.raw_lines]) }}><RotateCcw size={14}/> Restore raw OCR</button>
+      <section className="delete-region"><div><strong>Not useful reading text?</strong><span>Remove page numbers, unwanted sound effects, or false OCR regions from this page.</span></div>{deleteError&&<p role="alert">{deleteError}</p>}<button disabled={deleteBusy} aria-busy={deleteBusy} onClick={remove}><Trash2 size={15}/> {deleteBusy?'Deleting…':'Delete text region'}</button></section>
     </aside>
   )
 }

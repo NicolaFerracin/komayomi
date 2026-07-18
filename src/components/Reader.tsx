@@ -235,6 +235,13 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
     }))}))
   }
 
+  function deleteBlock() {
+    if(editor===null)return
+    const removed=editor
+    setData((current)=>({...current,pages:current.pages.map((item,index)=>index!==pageIndex?item:{...item,blocks:item.blocks.filter((_,blockIndex)=>blockIndex!==removed)})}))
+    setEditorDirty(false);setEditor(null);setSelectionAction(null);setLookup(null)
+  }
+
   function changeGeometry(blockIndex: number, box: [number, number, number, number], commit: boolean, original?: [number, number, number, number]) {
     setData((current) => ({...current, pages: current.pages.map((item, p) => p !== pageIndex ? item : ({...item, blocks: item.blocks.map((block, b) => b === blockIndex ? {...block, box} : block)}))}))
     if (commit) { if(original)setLayoutHistory((items)=>[...items,{page:pageIndex,block:blockIndex,box:original}]); api.blockGeometry(data.volume_id, pageIndex, blockIndex, box).catch(() => undefined) }
@@ -287,7 +294,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
   return (
     <main className="reader-shell" style={{'--tool-panel-width':`${display.panelWidth}px`} as CSSProperties}>
       <header className="reader-header">
-        <div className="reader-header__left"><button className="icon-button dark" onClick={()=>{if(closeEditor())onExit()}}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><strong>{data.volume}</strong></div></div>
+        <div className="reader-header__left"><button className="icon-button dark" aria-label="Back to library" onClick={()=>{if(closeEditor())onExit()}}><ArrowLeft size={19}/></button><Brand compact/><div className="reader-title"><span>{data.title}</span><h1>{data.volume}</h1></div></div>
         <button className="reader-progress" title="Browse pages" onClick={()=>{if(!closeEditor())return;setNavigator(true);setLens(false);setLookup(null);setSettings(false);setLookupHistory(false)}}><span>{String(pageIndex + 1).padStart(3, '0')}</span><div><i style={{width: `${(pageIndex + 1) / data.pages.length * 100}%`}}/></div><span>{String(data.pages.length).padStart(3, '0')}</span></button>
         <div className="reader-tools">
           <button className={learning?'active learning-tool':'learning-tool'} title="Learning Pass" onClick={()=>{if(!closeEditor())return;setLearning(!learning);setMeaningCheck(false);setLens(false);setNavigator(false);setSettings(false);setLookupHistory(false);setLookup(null);setRecall(null)}}><BookHeart size={18}/><span>Learning Pass</span></button>
@@ -308,7 +315,7 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           </div>
         )}
         {page.ocr_quality?.suspicious&&page.ocr_quality.reviewed&&<div className="ocr-reviewed-chip"><Check size={12}/> OCR reviewed <button onClick={reopenReview}>Reopen issue</button></div>}
-        <button className="page-turn page-turn--prev" onClick={() => move(-1)} disabled={pageIndex === 0}><ChevronRight/></button>
+        <button className="page-turn page-turn--prev" aria-label="Previous page" onClick={() => move(-1)} disabled={pageIndex === 0}><ChevronRight/></button>
         <div className="page-wrap" style={{
           width: `calc((100vh - 172px) * ${page.img_width / page.img_height} * ${zoom})`,
           height: `calc((100vh - 172px) * ${zoom})`,
@@ -317,10 +324,10 @@ export function Reader({ data: initialData, onExit }: { data: ReaderData; onExit
           <img src={page.image_url} alt={`Page ${pageIndex + 1}`}/>
           {page.blocks.map((block, index) => <BubbleOverlay key={index} block={block} pageWidth={page.img_width} pageHeight={page.img_height} textScale={display.overlayScale} learned={lessonMatches.filter((lesson)=>(lesson.block_indices||[]).includes(index)).length} active={layoutMode || selectionAction?.block === index || lookup?.block === index || (searchMatch?.page===pageIndex&&searchMatch.block===index)} layoutMode={layoutMode} onGeometryChange={(box, commit) => changeGeometry(index, box, commit)} onSelection={(text, ruby, context, x, y) => setSelectionAction({text, ruby, context, block: index, x, y})} onClick={() => { if(!closeEditor())return;setEditor(index); setLens(false); setNavigator(false); setLookup(null); setSelectionAction(null) }}/>) }
         </div>
-        <button className="page-turn page-turn--next" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
+        <button className="page-turn page-turn--next" aria-label="Next page" onClick={() => move(1)} disabled={pageIndex === data.pages.length - 1}><ChevronLeft/></button>
       </section>
 
-      {selectedBlock && <BubbleEditor volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={editor!} block={selectedBlock} onClose={closeEditor} onSaved={saveBlock} onDirtyChange={setEditorDirty}/>}
+      {selectedBlock && <BubbleEditor volumeId={data.volume_id} pageIndex={pageIndex} blockIndex={editor!} block={selectedBlock} onClose={closeEditor} onSaved={saveBlock} onDeleted={deleteBlock} onDirtyChange={setEditorDirty}/>}
       {lens && <PageLens
         volumeId={data.volume_id}
         page={pageIndex}

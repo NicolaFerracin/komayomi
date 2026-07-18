@@ -1,4 +1,5 @@
 import { expect, test } from 'playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 
 const quality = {suspicious:false,reviewed:false,flagged_blocks:0,reason:null}
 const pages = [
@@ -104,6 +105,15 @@ test('unsaved transcription blocks accidental tool switches', async ({page}) => 
   page.once('dialog',(dialog)=>dialog.accept())
   await page.getByRole('button',{name:/Page Lens/}).click()
   await expect(page.getByRole('heading',{name:'Page Lens'})).toBeVisible()
+})
+
+test('deletes an unwanted OCR text region from the bubble editor',async({page})=>{
+  await page.locator('.bubble-edit-trigger').first().click()
+  page.once('dialog',(dialog)=>dialog.accept())
+  const deleted=page.waitForRequest((request)=>request.url().endsWith('/pages/0/blocks/0')&&request.method()==='DELETE')
+  await page.getByRole('button',{name:'Delete text region'}).click();await deleted
+  await expect(page.getByRole('heading',{name:/Bubble 1/})).toHaveCount(0)
+  await expect(page.locator('.bubble-overlay')).toHaveCount(0)
 })
 
 test('adds and removes a page bookmark', async ({page}) => {
@@ -212,4 +222,24 @@ test('keeps the primary reader toolbar focused',async({page})=>{
   await page.getByTitle('More reader tools').click()
   await expect(page.getByRole('button',{name:'Recent lookups'})).toBeVisible()
   await expect(page.getByRole('button',{name:'Reader settings'})).toBeVisible()
+})
+
+test('reader and library have no automated accessibility violations',async({page})=>{
+  const readerAudit=await new AxeBuilder({page}).analyze()
+  expect(readerAudit.violations).toEqual([])
+  await page.getByRole('button',{name:'Back to library'}).click()
+  await expect(page.getByRole('heading',{name:/Read the story/})).toBeVisible()
+  const libraryAudit=await new AxeBuilder({page}).analyze()
+  expect(libraryAudit.violations).toEqual([])
+})
+
+test('mobile library reflows and reader controls remain touchable',async({page})=>{
+  await page.setViewportSize({width:390,height:844})
+  await page.getByRole('button',{name:'Back to library'}).click()
+  await expect(page.getByRole('button',{name:'Add volume'})).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBeTruthy()
+  await page.getByRole('button',{name:'Open Dragon Ball Volume 01'}).click()
+  const sizes=await page.locator('.reader-header button').evaluateAll((buttons)=>buttons.map((button)=>button.getBoundingClientRect()).filter((box)=>box.width>0&&box.height>0).map((box)=>({width:box.width,height:box.height})))
+  expect(sizes.length).toBeGreaterThan(0)
+  for(const size of sizes){expect(size.width).toBeGreaterThanOrEqual(44);expect(size.height).toBeGreaterThanOrEqual(44)}
 })

@@ -20,6 +20,7 @@
     "vite": "latest"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "playwright": "^1.61.1"

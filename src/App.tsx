@@ -30,6 +30,17 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [volumes.some((volume) => volume.status === 'processing' || volume.status === 'queued')])
 
+  useEffect(()=>{
+    const closeTopDialog=(event:KeyboardEvent)=>{
+      if(event.key!=='Escape')return
+      if(editing)setEditing(null)
+      else if(studying)setStudying(false)
+      else if(importing)setImporting(false)
+    }
+    window.addEventListener('keydown',closeTopDialog)
+    return()=>window.removeEventListener('keydown',closeTopDialog)
+  },[editing,studying,importing])
+
   async function open(volume: Volume) {
     try { setReader(await api.reader(volume.id)) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not open volume') }
@@ -47,8 +58,8 @@ export default function App() {
 
   if (reader) return <Reader data={reader} onExit={() => { setReader(null); refresh() }}/>
   return <>
-    {error && <div className="global-error">{error}</div>}
-    {notice&&<div className="global-notice">{notice}</div>}
+    {error && <div className="global-error" role="alert">{error}</div>}
+    {notice&&<div className="global-notice" role="status" aria-live="polite">{notice}</div>}
     <Library volumes={volumes} restoring={restoring} onRestore={restoreBackup} onImport={() => setImporting(true)} onStudy={() => setStudying(true)} onEdit={setEditing} onOpen={open} onRetry={(volume)=>changeProcessing(volume,'start')} onPause={(volume)=>changeProcessing(volume,'pause')}/>
     {importing && <ImportDialog onClose={() => setImporting(false)} onImported={(volume) => {
       setVolumes((items) => [volume, ...items.filter((item)=>item.id!==volume.id)])

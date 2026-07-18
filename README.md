@@ -27,7 +27,7 @@ npm run dev -- --host 127.0.0.1
 - Run Mokuro asynchronously with pause/resume, restart recovery, persistent diagnostics, and progress reporting
 - Open completed volumes in a right-to-left reader
 - Hover bubbles to see selectable web-font text
-- Edit OCR lines while preserving the raw transcription
+- Edit OCR lines while preserving the raw transcription, or remove unwanted regions such as page numbers and sound effects
 - Store structured ruby spans separately from canonical text
 - Look up inflected Japanese locally with JMdict/KANJIDIC data
 - Reprocess a cropped text region with OpenAI, Anthropic, or Gemini vision, review the proposal, then explicitly save it

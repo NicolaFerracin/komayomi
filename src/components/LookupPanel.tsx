@@ -23,7 +23,7 @@ export function LookupPanel({ query, sentence = query, rubySpans = [], volumeId,
 
   return (
     <aside className="tool-panel lookup-panel">
-      <header><div><span className="eyebrow">LOCAL DICTIONARY</span><h2>{query}</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header>
+      <header><div><span className="eyebrow">LOCAL DICTIONARY</span><h2>{query}</h2></div><button className="icon-button" aria-label="Close dictionary" onClick={onClose}><X size={19}/></button></header>
       {!result && !error && <div className="lookup-loading"><LoaderCircle className="spin" size={20}/> Reading locally…</div>}
       {error && <div className="error-note">{error}</div>}
       {result && <>

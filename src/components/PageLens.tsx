@@ -43,7 +43,7 @@ export function PageLens({ volumeId, page, pageData, initialQuestion='', onClose
   }
   return (
     <aside className="tool-panel page-lens">
-      <header><div><span className="eyebrow">OPT-IN CONTEXT</span><h2>Page Lens</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header>
+      <header><div><span className="eyebrow">OPT-IN CONTEXT</span><h2>Page Lens</h2></div><button className="icon-button" aria-label="Close panel" onClick={onClose}><X size={19}/></button></header>
       {!result && <><div className="lens-orbit"><div><Eye size={30}/></div><i/><i/><i/></div><h3>See what sits beneath the words.</h3>
       <p>Notice creative furigana, wordplay, register, cultural references, and relationships between dialogue and artwork.</p></>}
       <div className="privacy-note"><ShieldCheck size={18}/><div><strong>{result ? 'This analysis was explicitly requested.' : 'Nothing has been shared.'}</strong><span>External processing happens only when you click an action below.</span></div></div>

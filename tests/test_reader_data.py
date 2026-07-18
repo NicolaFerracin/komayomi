@@ -69,4 +69,14 @@ class ReaderDataTests(unittest.TestCase):
             app.save_geometry('v1',0,0,BlockGeometry(box=[2,3,40,50]))
         save.assert_called_once()
 
+    def test_delete_block_persists_the_remaining_effective_layout(self):
+        blocks=[{'lines':['page number'],'ruby':[[]]},{'lines':['dialogue'],'ruby':[[]]}]
+        metadata={'pages':[{'blocks':blocks}]}
+        with patch.object(app,'require_volume',return_value=SimpleNamespace()), \
+             patch.object(app,'reader_payload',return_value=metadata), \
+             patch.object(app,'apply_saved_text'), patch.object(app.db,'replace_page_blocks') as replace:
+            result=app.delete_block('v1',0,0)
+        self.assertEqual(result['blocks'],[blocks[1]])
+        replace.assert_called_once()
+
 if __name__=='__main__':unittest.main()

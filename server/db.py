@@ -370,6 +370,16 @@ def save_page_override(volume_id: str, page_index: int, blocks: list[dict], upda
         conn.execute("DELETE FROM search_index WHERE volume_id=?", (volume_id,))
 
 
+def replace_page_blocks(volume_id: str, page_index: int, blocks: list[dict], updated_at: str) -> None:
+    """Persist an effective page layout and discard stale index-based edits."""
+    with connection() as conn:
+        conn.execute("INSERT OR REPLACE INTO page_overrides VALUES (?, ?, ?, ?)",
+                     (volume_id, page_index, json.dumps(blocks, ensure_ascii=False), updated_at))
+        for table in ("corrections", "block_geometry", "block_text_overrides"):
+            conn.execute(f"DELETE FROM {table} WHERE volume_id=? AND page_index=?", (volume_id, page_index))
+        conn.execute("DELETE FROM search_index WHERE volume_id=?", (volume_id,))
+
+
 def block_geometries(volume_id: str) -> dict[tuple[int, int], list[float]]:
     with connection() as conn:
         rows = conn.execute("SELECT page_index, block_index, box_json FROM block_geometry WHERE volume_id=?", (volume_id,)).fetchall()
