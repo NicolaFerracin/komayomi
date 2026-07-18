@@ -71,7 +71,7 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider: provider || null, include_next, question: question || null }),
   }),
-  meaningCheck:(id:string,page:number,answers:Array<{block_index:number;interpretation:string}>,include_artwork=false,question?:string,provider?:string)=>request<MeaningCheckResult>(`/api/volumes/${id}/pages/${page}/meaning-check`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers,include_artwork,question:question||null,provider:provider||null})}),
+  meaningCheck:(id:string,page:number,answers:Array<{block_index:number;interpretation:string;unable?:boolean}>,include_artwork=false,question?:string,provider?:string)=>request<MeaningCheckResult>(`/api/volumes/${id}/pages/${page}/meaning-check`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers,include_artwork,question:question||null,provider:provider||null})}),
   learningPass:(id:string,page:number,provider?:string)=>request<LearningPassResult>(`/api/volumes/${id}/pages/${page}/learning-pass`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:provider||null})}),
   lessonMatches:(id:string,page:number)=>request<Lesson[]>(`/api/volumes/${id}/pages/${page}/lesson-matches`,{cache:'no-store'}),
   lessons:()=>request<Lesson[]>('/api/lessons',{cache:'no-store'}),

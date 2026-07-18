@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 
 const quality = {suspicious:false,reviewed:false,flagged_blocks:0,reason:null}
 const pages = [
-  {img_width:800,img_height:1200,img_path:'one.jpg',image_url:'/api/mock/one.jpg',ocr_quality:quality,blocks:[{box:[100,100,300,500],vertical:true,font_size:30,lines_coords:[],lines:['むかしむかし'],raw_lines:['むかしむかし'],ruby:[]}]},
+  {img_width:800,img_height:1200,img_path:'one.jpg',image_url:'/api/mock/one.jpg',ocr_quality:quality,blocks:[{box:[100,100,300,500],vertical:true,font_size:30,lines_coords:[],lines:['むかしむかし'],raw_lines:['むかしむかし'],ruby:[]},{box:[350,100,500,400],vertical:true,font_size:30,lines_coords:[],lines:['山奥'],raw_lines:['山奥'],ruby:[]}]},
   {img_width:800,img_height:1200,img_path:'two.jpg',image_url:'/api/mock/two.jpg',ocr_quality:quality,blocks:[{box:[100,100,300,500],vertical:true,font_size:30,lines_coords:[],lines:['孫悟空'],raw_lines:['孫悟空'],ruby:[]}]},
 ]
 
@@ -111,9 +111,9 @@ test('deletes an unwanted OCR text region from the bubble editor',async({page})=
   await page.locator('.bubble-edit-trigger').first().click()
   page.once('dialog',(dialog)=>dialog.accept())
   const deleted=page.waitForRequest((request)=>request.url().endsWith('/pages/0/blocks/0')&&request.method()==='DELETE')
-  await page.getByRole('button',{name:'Delete text region'}).click();await deleted
+  await page.getByRole('button',{name:'Delete text region'}).first().click();await deleted
   await expect(page.getByRole('heading',{name:/Bubble 1/})).toHaveCount(0)
-  await expect(page.locator('.bubble-overlay')).toHaveCount(0)
+  await expect(page.locator('.bubble-overlay')).toHaveCount(1)
 })
 
 test('deletes an unwanted region directly in layout editing',async({page})=>{
@@ -122,8 +122,8 @@ test('deletes an unwanted region directly in layout editing',async({page})=>{
   await expect(page.getByText('Layout edit',{exact:true})).toBeVisible()
   page.once('dialog',(dialog)=>dialog.accept())
   const deleted=page.waitForRequest((request)=>request.url().endsWith('/pages/0/blocks/0')&&request.method()==='DELETE')
-  await page.getByRole('button',{name:'Delete text region'}).click();await deleted
-  await expect(page.locator('.bubble-overlay')).toHaveCount(0)
+  await page.getByRole('button',{name:'Delete text region'}).first().click();await deleted
+  await expect(page.locator('.bubble-overlay')).toHaveCount(1)
 })
 
 test('adds and removes a page bookmark', async ({page}) => {
@@ -177,6 +177,17 @@ test('batches page comprehension answers into one Meaning Check',async({page})=>
   await expect(page.getByText('You understood the story opening.')).toBeVisible()
   await expect(page.getByText('Meaning captured')).toBeVisible()
   await expect(page.getByText('Once upon a time',{exact:true})).toBeVisible()
+})
+
+test('reorders Meaning Check bubbles and submits an unknown block without a translation',async({page})=>{
+  await page.getByTitle('Check your understanding').click()
+  await expect(page.getByRole('complementary').getByText('むかしむかし')).toBeVisible()
+  await page.getByRole('button',{name:'Move bubble 2 up'}).click()
+  await expect(page.locator('.meaning-blocks>section').first()).toContainText('山奥')
+  await page.getByRole('button',{name:'I can’t translate this'}).first().click()
+  const request=page.waitForRequest((value)=>value.url().endsWith('/meaning-check')&&value.method()==='POST')
+  await page.getByRole('button',{name:/Check 1 bubble/}).click()
+  expect((await request).postDataJSON().answers).toEqual([{block_index:1,interpretation:'',unable:true}])
 })
 
 test('preserves Meaning Check drafts while vocabulary temporarily covers it',async({page})=>{

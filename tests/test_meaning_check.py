@@ -49,5 +49,15 @@ class MeaningCheckTests(unittest.TestCase):
         self.assertEqual(evaluation["meaning_score"],50);self.assertEqual(evaluation["literal_score"],50)
         self.assertIn("the story begins",evaluation["missing"]);self.assertIn("50%",result["check"]["summary"])
 
+    def test_unknown_block_is_submitted_and_receives_learning_feedback(self):
+        provider=SimpleNamespace(id="mock",model="test")
+        request=app.MeaningCheckRequest(answers=[app.MeaningAnswer(block_index=1,interpretation="",unable=True)])
+        feedback={"summary":"Unknown block","evaluations":[{"block_index":1,"literal_score":80,"verdict":"","literal_translation":"in the mountain depths","natural_translation":"deep in the mountains","contextual_meaning":"the remote setting","correct":[],"missing":[],"added":[],"incorrect":[],"coverage":[{"japanese":"山奥","meaning":"deep in the mountains","status":"captured","answer_evidence":"invented evidence"}]}]}
+        with patch.object(app,"require_volume",return_value=self.volume),patch.object(app,"reader_payload",return_value={"pages":[self.page]}),patch.object(app,"apply_saved_text"),patch.object(app,"structured_text",new=AsyncMock(return_value=(feedback,provider))):
+            result=asyncio.run(app.meaning_check("v1",0,request))
+        evaluation=result["check"]["evaluations"][0]
+        self.assertEqual(evaluation["block_index"],1);self.assertEqual(evaluation["meaning_score"],0);self.assertEqual(evaluation["literal_score"],0)
+        self.assertEqual(db.meaning_check_history("v1",0)[0]["input"]["answers"][0]["unable"],True)
+
 
 if __name__=="__main__": unittest.main()

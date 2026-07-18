@@ -136,6 +136,7 @@ class GrammarExplain(BaseModel):
 class MeaningAnswer(BaseModel):
     block_index: int
     interpretation: str
+    unable: bool = False
 
 
 class MeaningCheckRequest(BaseModel):
@@ -825,16 +826,18 @@ async def meaning_check(volume_id: str, page_index: int, request: MeaningCheckRe
     answer_map={}
     for answer in request.answers:
         interpretation=answer.interpretation.strip()
-        if interpretation and 0 <= answer.block_index < len(blocks):
+        if (interpretation or answer.unable) and 0 <= answer.block_index < len(blocks):
             block=blocks[answer.block_index];japanese="".join(block.get("lines",[]))
-            answer_map[answer.block_index]={"block_index":answer.block_index,"japanese":japanese,"printed_ruby":[span for line in block.get("ruby",[]) for span in line if span.get("printed")],"local_tokens":[{"surface":token.get("surface"),"lemma":token.get("lemma"),"reading":token.get("reading"),"part_of_speech":token.get("part_of_speech")} for token in tokenize(japanese)],"local_grammar":analyze_grammar(japanese,None).get("matches",[]),"interpretation":interpretation}
+            answer_map[answer.block_index]={"block_index":answer.block_index,"japanese":japanese,"printed_ruby":[span for line in block.get("ruby",[]) for span in line if span.get("printed")],"local_tokens":[{"surface":token.get("surface"),"lemma":token.get("lemma"),"reading":token.get("reading"),"part_of_speech":token.get("part_of_speech")} for token in tokenize(japanese)],"local_grammar":analyze_grammar(japanese,None).get("matches",[]),"interpretation":interpretation,"unable":answer.unable}
     answers=list(answer_map.values())
-    if not answers: raise HTTPException(400,"Write your understanding for at least one text block")
+    if not answers: raise HTTPException(400,"Translate or mark at least one text block as unknown")
     if len(answers)>50: raise HTTPException(400,"A single check can contain at most 50 answers")
     page_context=[{"block_index":index,"japanese":"".join(block.get("lines",[])),"box":block.get("box"),"vertical":bool(block.get("vertical"))} for index,block in enumerate(blocks)]
     prompt="""You are a strict but fair Japanese manga comprehension evaluator. Compare only the reader's submitted interpretation with the Japanese; never credit the reader for content that appears only in your own translation. Use other page blocks only as context.
 
 First decompose each answered Japanese block into all atomic semantic units: events, participants, setting, modifiers, tense/aspect, discourse markers, and important nuance. Put them in coverage. For every unit, status must be exactly captured, partial, missing, or incorrect. A captured or partial unit MUST include answer_evidence copied verbatim from the reader's answer; never paraphrase or invent evidence. If no exact excerpt supports it, mark it missing. Do not let understanding one clause earn credit for later untranslated clauses.
+
+An answer with unable=true was deliberately submitted without a translation. Give it zero comprehension credit, mark every semantic unit missing, and still provide the full literal and natural translations so the reader can learn from it.
 
 Do not penalize natural rewording. Judge literal structural alignment separately, from 0-100, but consider the entire source block including omissions. List concrete points under the comparison categories. A missing nuance is not automatically an error, but an omitted event or clause is missing meaning. Literal translation should expose Japanese structure while remaining readable; natural translation should sound idiomatic. Never infer kanji that were written in kana. Return one evaluation for every answered block, using exactly its block_index.\n\n"""
     prompt += "PAGE BLOCKS:\n"+json.dumps(page_context,ensure_ascii=False)+"\n\nREADER ANSWERS:\n"+json.dumps(answers,ensure_ascii=False)
@@ -851,7 +854,8 @@ Do not penalize natural rewording. Judge literal structural alignment separately
     answered={item["block_index"] for item in answers}
     if {item.get("block_index") for item in evaluations} != answered:
         raise HTTPException(503,"The AI returned incomplete feedback. Nothing was saved; please retry.")
-    result["evaluations"]=evaluations
+    evaluation_map={item["block_index"]:item for item in evaluations}
+    result["evaluations"]=[evaluation_map[item["block_index"]] for item in answers]
     average=round(sum(item["meaning_score"] for item in evaluations)/len(evaluations))
     result["summary"]=f"Your interpretation captured about {average}% of the evaluated meaning across {len(evaluations)} text block{'s' if len(evaluations)!=1 else ''}. Review the missing units below before comparing the full translations."
     item={"id":uuid.uuid4().hex,"volume_id":volume_id,"page_index":page_index,"cache_key":cache_key,"input":{"answers":answers,"include_artwork":request.include_artwork,"question":request.question},"result":result,"provider":provider.id,"model":provider.model,"created_at":now()}
