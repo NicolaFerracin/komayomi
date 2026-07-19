@@ -3,6 +3,10 @@
 A local-first Japanese manga reader with editable OCR, contextual dictionaries,
 and opt-in AI assistance.
 
+KomaYomi is a verification and investigation tool, not a complete language
+curriculum. The broader near-zero-to-physical-reading program is documented in
+[From Restarting Japanese to Reading a Physical Tankōbon](docs/physical-tankobon-learning-path.md).
+
 ## Development
 
 ```sh
